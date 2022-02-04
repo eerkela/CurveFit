@@ -189,393 +189,34 @@ def covariance_to_correlation(cov_mat: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(corr_mat, columns = par_names, index = par_names)
 
 
-def configure_plot():
-    raise NotImplementedError()
+class SymFunc:
 
-
-def configure_axes():
-    raise NotImplementedError()
-
-
-def add_axes():
-    raise NotImplementedError()
-
-
-def add_data():
-    raise NotImplementedError()
-
-
-def add_errors():
-    raise NotImplementedError()
-
-
-def add_fit():
-    raise NotImplementedError()
-
-
-
-
-class OldFitFunc:
-
-    """
-    Private:
-        _data
-        _sym_func
-        _lambda_func
-        _ind_var
-        _fit_pars
-        _covariance
-        _correlation
-        _adj_r_squared
-        _chi_squared
-
-    """
-
-    def __init__(self, data: pd.DataFrame,
-                 function: Union[str, sym.core.expr.Expr],
-                 independent_variables: Union[str, list[str]]):
-        """Column names should match independent variables in expression.
-        Everything else will be interpreted as a free parameter for fits.
-        
-        Use r-style:   y ~ a * x + b
-        match vars to columns to determine dependent and independent
-        """
-        self.data = data
-        self.function = function
-
-    @classmethod
-    def from_simulated(cls,
-                       func: Union[str, sym.core.expr.Expr],
-                       ind_var: Union[str, sym.Symbol],
-                       par_values: dict[Union[str, sym.Symbol], float],
-                       *args,
-                       start: float = 0,
-                       stop: float = 10,
-                       num_points: int = 20,
-                       noise: float = 1,
-                       seed = 12345):
-        if issubclass(type(func), str):
-            func = parse_expr(func)
-        if issubclass(type(ind_var), str):
-            ind_var = sym.Symbol(ind_var)
-        if ind_var not in func.free_symbols:
-            err_msg = (f"[{cls.__name__}.from_simulated] Could not generate "
-                       f"simulated data: `func` must contain the symbol "
-                       f"identified in `ind_var` (expected `{str(func)}` to "
-                       f"contain `{str(ind_var)})`")
-            raise ValueError(err_msg)
-
-        # substitute in parameter values and create lambda function
-        sub_func = func.subs(par_values)
-        if len(sub_func.free_symbols) != 1:
-            err_msg = (f"[{cls.__name__}.from_simulated] Could not generate "
-                       f"simulated data: after substituting `par_values`, "
-                       f"`func` must have exactly 1 free variable remaining "
-                       f"({str(sub_func)})")
-            raise ValueError(err_msg)
-        lam_func = lambdify(ind_var, sub_func, "numpy")
-
-        # generate simulated data
-        rng = np.random.default_rng(seed)
-        xdata = np.linspace(start, stop, num_points)
-        y = np.array([lam_func(x) for x in xdata])
-        y_noise = noise * rng.normal(size=xdata.size)
-        ydata = y + y_noise
-        data = pd.DataFrame({str(ind_var): xdata, "data": ydata})
-        return cls(data, func)
-
-    @property
-    def data(self) -> pd.DataFrame:
-        return self._data
-
-    @data.setter
-    def data(self, data, result_column: str = "data") -> None:
-        if len(data) < 2:
-            class_name = self.__class__.__name__
-            err_msg = (f"[{class_name}] Invalid observation data: `data` must "
-                       f"contain at least 2 data points (received {len(data)} "
-                       f"rows)")
-            raise ValueError(err_msg)
-        if len(data.columns) != 2:
-            class_name = self.__class__.__name__
-            err_msg = (f"[{class_name}] Invalid observation data: `data` must "
-                       f"have exactly 2 columns\n{str(data)}")
-            raise ValueError(err_msg)
-        if list(data.columns).count(result_column) != 1:
-            class_name = self.__class__.__name__
-            err_msg = (f"[{class_name}] Invalid observation data: expected "
-                       f"`data` to contain a single dependent variable column "
-                       f"named '{result_column}' (received {data.columns} "
-                       f"instead)")
-            raise ValueError(err_msg)
-        self._result_column = result_column
-
-        # identify independent variable
-        ind_vars = list(data.columns).copy()
-        ind_vars.remove(result_column)
-        self._ind_var = sym.Symbol(ind_vars[0])
-
-        # reset fit
-        if hasattr(self, "_fit_pars"):
-            for k in self._fit_pars:
-                self._fit_pars[k] = None
-        self._lambda_func = None
-        self._covariance = None
-        self._correlation = None
-        self._residuals = None
-        self._adj_r_squared = None
-        self._chi_squared = None
-
-        # set data
-        self._data = data
-
-    @property
-    def function(self) -> sym.core.expr.Expr:
-        return self._sym_func
-
-    @function.setter
-    def function(self, func: Union[str, sym.core.expr.Expr]) -> None:
-        if issubclass(type(func), str):
-            func = parse_expr(func)
-
-        # get fit parameters, preserving order from input function
-        free_symbols = func.free_symbols
-        str_func = str(func)
-        indices = []
-        for symbol in free_symbols:
-            if symbol != self._ind_var:
-                val = (symbol, str_func.index(str(symbol)))
-                indices.append(val)
-        indices.sort(key=lambda x: x[1])
-
-        # as of python 3.7, dict preserves insertion order by default
-        self._fit_pars = dict.fromkeys([t[0] for t in indices], None)
-
-        # for python <= 3.6, replace above with the following:
-        # self._fit_pars = OrderedDict.fromkeys([t[0] for t in indices], None)
-
-        # reset fit
-        self._lambda_func = None
-        self._covariance = None
-        self._correlation = None
-        self._residuals = None
-        self._adj_r_squared = None
-        self._chi_squared = None
-
-        # set function
-        self._sym_func = func
-
-    @property
-    def independent_variable(self) -> sym.Symbol:
-        return self._ind_var
-
-    @property
-    def derivative(self) -> FitFunc:
-        return FitFunc(self.data, sym.diff(self.function, self._ind_var))
-
-    @property
-    def fit_parameters(self) -> dict[sym.Symbol, float]:
-        """TODO: return a dict with parameter guesses.  None if no fit has been
-        generated yet.
-        """
-        return self._fit_pars
-
-    @property
-    def covariance_matrix(self) -> pd.DataFrame:
-        if self._lambda_func is None:
-            class_name = self.__class__.__name__
-            err_msg = (f"[{class_name}] Could not generate covariance matrix: "
-                       f"function has not yet been fitted")
-            raise RuntimeError(err_msg)
-        return self._covariance
-
-    @property
-    def correlation_matrix(self) -> pd.DataFrame:
+    def __init__(self, str_func: str):
         raise NotImplementedError()
 
-    @property
-    def residuals(self) -> pd.DataFrame:
-        if self._lambda_func is None:
-            class_name = self.__class__.__name__
-            err_msg = (f"[{class_name}] Could not generate residuals: function "
-                       f"has not yet been fitted")
-            raise RuntimeError(err_msg)
-
-        if self._residuals is not None:
-            return self._residuals
-        columns = list(self.data.columns)
-        observed = columns[len(columns) - columns.index(str(self._ind_var)) - 1]
-        get_expected = lambda x: self._lambda_func(x[str(self._ind_var)])
-        get_residual = lambda x: x[observed] - x["expected"]
-        df = self.data.assign(expected = get_expected, residual = get_residual)
-        self._residuals = df[[str(self._ind_var), "residual"]]
-        return self._residuals
-
-    @property
-    def degrees_of_freedom(self) -> int:
-        return len(self.data) - len(self.fit_parameters)
-
-    @property
-    def r_squared(self) -> float:
+    def derivative(self, with_respect_to: Union[str, sym.Symbol]) -> SymFunc:
         raise NotImplementedError()
 
-    @property
-    def adjusted_r_squared(self) -> float:
-        """Returns the adjusted r-squared coefficient of determination for the
-        current fit.
-        """
-        if self._adj_r_squared is not None:
-            return self._adj_r_squared
-        residuals = list(self.residuals["residual"])
-        observed = list(self.data[self._result_column])
-        n_obs = len(observed)
-        avg_obs = sum(observed) / n_obs
-
-        SS_res = sum([e**2 for e in residuals])
-        SS_tot = sum([(obs - avg_obs)**2 for obs in observed])
-        df_t = n_obs - 1
-        df_e = self.degrees_of_freedom - 1
-        self._adj_r_squared = 1 - ((SS_res/df_e) / (SS_tot/df_t))
-        return self._adj_r_squared
-
-    @property
-    def chi_squared(self) -> float:
-        """Returns the reduced chi-square statistic for the current fit."""
-        if self._chi_squared is not None:
-            return self._chi_squared
-        residuals = list(self.residuals["residual"])
-        SS_res = sum([e**2 for e in residuals])
-        self._chi_squared = SS_res / self.degrees_of_freedom
-        return self._chi_squared
-
-    @property
-    def info(self) -> tuple[str]:
-        # contents
-        # 0 - original fit function
-        # 1 - observation data
-        # 2 - fit parameters
-        # 3 - covariance matrix
-        # 4 - adjusted r squared
-        # 5 - chi squared
+    def intersection(self, other: Union[str, SymFunc]):
         raise NotImplementedError()
 
-    def fit(self, p0: dict[Union[str, sym.Symbol],
-                           Union[float, tuple[float]]] = None) -> None:
-        """TODO: implement parameter guesses (maybe use kwargs?).
-        if p0 values are given as tuples, they are interpreted as a bounded
-        range, else they are unbounded guesses.
-        sorted(dict, key = ...) works to sort dictionaries by key
-        """
-        if self._ind_var not in self._sym_func.free_symbols:
-            class_name = self.__class__.__name__
-            err_msg = (f"[{class_name}] Invalid sympy function: `function` "
-                       f"must contain the same independent variable as "
-                       f"FitFunc.data (expected '{str(self._sym_func)}' to "
-                       f"contain independent variable '{str(self._ind_var)}')")
-            raise ValueError(err_msg)
-
-        # identify columns
-        x = list(self.data[str(self._ind_var)])
-        y = list(self.data[self._result_column])
-
-        # set up lambda function and perform fit
-        variables = [self._ind_var, *self._fit_pars.keys()]
-        fit_func = lambdify(variables, self._sym_func, "numpy")
-        par_values, covariance = curve_fit(fit_func, x, y)
-
-        # gather fit parameters
-        for k, v in zip(self._fit_pars.keys(), par_values):
-            self._fit_pars[k] = v
-
-        # format covariance/correlation matrix
-        par_names = list(map(str, self._fit_pars.keys()))
-        self._covariance = pd.DataFrame(covariance, columns = par_names,
-                                        index = par_names)
-        # rows = cols = len(par_names)
-        # self.correlation = np.zeros((rows, cols))
-        # for i in range(rows):
-        #     for j in range(cols):
-        #         cov = self.covariance[i, j]
-        #         x_var = self.covariance[i, i]
-        #         y_var = self.covariance[j, j]
-        #         self.correlation[i, j] = cov / np.sqrt(x_var * y_var)
-
-        # assign fitted lambda function
-        fit_func = self._sym_func.subs(self._fit_pars)
-        self._lambda_func = lambdify(self._ind_var, fit_func, "numpy")
-
-    def intersection(self, other: FitFunc, x0: float, tolerance: float = 1e-8,
-                     recursion_limit: int = 1000) -> float:
-        # newton-raphson gradient descent
-        this_deriv = self.derivative(with_respect_to = ind_var)
-        other_deriv = other.derivative(with_respect_to = ind_var)
-        f = lambda x: self.__call__(x) - other.__call__(x)
-        f_prime = lambda x: this_deriv.__call__(x) - other_deriv.__call__(x)
-        recursion_depth = 0
-        while abs(f(x0)) > tolerance:
-            x0 = x0 - f(x0) / f_prime(x0)
-            recursion_depth += 1
-            if recursion_depth > recursion_limit:
-                class_name = self.__class__.__name__
-                err_msg = (f"[{class_name}] Could not compute "
-                            f"intersection: recursion_limit reached "
-                            f"({recursion_limit})")
-                raise RecursionError(err_msg)
-        return x0
-
-    def maximum(self, around: float) -> float:
-        # reflect function, then minimize
+    def maximum(self, around) -> float:
         raise NotImplementedError()
 
-    def minimum(self, around: float) -> float:
-        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.fmin.html
+    def minimum(self, around) -> float:
         raise NotImplementedError()
 
-    def plot(self):
+    def plot(self, *) -> None:
         raise NotImplementedError()
 
-    def t_test(self, hypothesis: str, alpha: float = None, plot: bool = False,
-               save_to: Path = None) -> Union[float, bool]:
-        """two-tailed t_test (one-sided optional).  Returns p-value of a
-        particular proposed parameter value.  If alpha is given, returns
-        boolean.
-
-        Maybe pass in alternative hypothesis as a string?  e.g. "a=2" would
-        imply a two-sided hypothesis test.  "a > 2" would be one-sided.
-        """
-        comp = re.findall("(={1,2}|<=|>=|<|>)", hypothesis)
-        if len(comp) != 1:
-            class_name = self.__class__.__name__
-            err_msg = (f"[{class_name}] Could not perform t-test: "
-                       f"`hypothesis` must have exactly one of the following "
-                       f"(in)equality operators: ['=', '==', '>', '>=', '<', "
-                       f"'<='] (received {comp})")
-            raise ValueError(err_msg)
-
-        lhs, rhs = list(map(str.strip, re.split(comp[0], hypothesis)))
-        # check lhs is in par_values and rhs is a number
-
-        if any(c in comp for c in ["=", "=="]):  # two-tailed
-            pass
-        if any(c in comp for c in [">", ">="]):  # right-tailed
-            pass
-        if any(c in comp for c in ["<", "<="]):  # left-tailed
-            pass
+    def substitute(self):
         raise NotImplementedError()
 
-    def __call__(self, x) -> float:
-        if self._lambda_func is None:
-            self.fit()
-        return self._lambda_func(x)
-
-    def __enter__(self):
-        raise NotImplementedError()
-
-    def __exit__(self):
+    def __call__(self, *) -> float:
         raise NotImplementedError()
 
     def __str__(self) -> str:
-        return str(self.function)
+        raise NotImplementedError()
 
 
 class GeneralizedFitFunc:
@@ -1187,6 +828,33 @@ class CurveFit:
         fit_func = self._sym_func.subs(self._fit_pars)
         self._lambda_func = lambdify(self._ind_var, fit_func, "numpy")
 
+    def intersection(self, other: FitFunc, x0: float, tolerance: float = 1e-8,
+                     recursion_limit: int = 1000) -> float:
+        # newton-raphson gradient descent
+        this_deriv = self.derivative(with_respect_to = ind_var)
+        other_deriv = other.derivative(with_respect_to = ind_var)
+        f = lambda x: self.__call__(x) - other.__call__(x)
+        f_prime = lambda x: this_deriv.__call__(x) - other_deriv.__call__(x)
+        recursion_depth = 0
+        while abs(f(x0)) > tolerance:
+            x0 = x0 - f(x0) / f_prime(x0)
+            recursion_depth += 1
+            if recursion_depth > recursion_limit:
+                class_name = self.__class__.__name__
+                err_msg = (f"[{class_name}] Could not compute "
+                            f"intersection: recursion_limit reached "
+                            f"({recursion_limit})")
+                raise RecursionError(err_msg)
+        return x0
+
+    def maximum(self, around: float) -> float:
+        # reflect function, then minimize
+        raise NotImplementedError()
+
+    def minimum(self, around: float) -> float:
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.fmin.html
+        raise NotImplementedError()
+
     def plot(self,
              *,
              height: float = None,
@@ -1372,6 +1040,35 @@ class CurveFit:
             plt.show()
         else:
             plt.savefig(save_to)
+
+    def t_test(self, hypothesis: str, alpha: float = None, plot: bool = False,
+               save_to: Path = None) -> Union[float, bool]:
+        """two-tailed t_test (one-sided optional).  Returns p-value of a
+        particular proposed parameter value.  If alpha is given, returns
+        boolean.
+
+        Maybe pass in alternative hypothesis as a string?  e.g. "a=2" would
+        imply a two-sided hypothesis test.  "a > 2" would be one-sided.
+        """
+        comp = re.findall("(={1,2}|<=|>=|<|>)", hypothesis)
+        if len(comp) != 1:
+            class_name = self.__class__.__name__
+            err_msg = (f"[{class_name}] Could not perform t-test: "
+                       f"`hypothesis` must have exactly one of the following "
+                       f"(in)equality operators: ['=', '==', '>', '>=', '<', "
+                       f"'<='] (received {comp})")
+            raise ValueError(err_msg)
+
+        lhs, rhs = list(map(str.strip, re.split(comp[0], hypothesis)))
+        # check lhs is in par_values and rhs is a number
+
+        if any(c in comp for c in ["=", "=="]):  # two-tailed
+            pass
+        if any(c in comp for c in [">", ">="]):  # right-tailed
+            pass
+        if any(c in comp for c in ["<", "<="]):  # left-tailed
+            pass
+        raise NotImplementedError()
 
     def __call__(self, x: Union[float, np.array], **kwargs) -> float:
         if not self.fitted:

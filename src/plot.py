@@ -1,18 +1,346 @@
 from __future__ import annotations
+import inspect
 from math import ceil, floor
 from pathlib import Path
-from typing import Union
+from typing import Type, Union
 
+import matplotlib as mpl
 from matplotlib.colors import to_rgb
 from matplotlib.font_manager import findSystemFonts, get_font
 from matplotlib.gridspec import GridSpec, SubplotSpec
 import matplotlib.pyplot as plt
 
-"""
-TODO: https://stackoverflow.com/questions/2024566/how-to-access-outer-class-from-an-inner-class
-"""
 
 NUMERIC = Union[int, float]
+
+
+class DynamicText:
+
+    def __init__(self, parent):
+        self.parent = parent
+
+    @property
+    def alpha(self) -> float:
+        text = self.get_text_obj()
+        if text:
+            result = text.get_alpha()
+            if result is None:
+                return 1.0
+            return result
+        return None
+
+    @alpha.setter
+    def alpha(self, new_alpha: NUMERIC) -> None:
+        text = self._get_text_obj(error=True)
+        if not isinstance(new_alpha, (int, float)):
+            err_msg = (f"[{self._error_trace()}] `alpha` must be a numeric "
+                       f"between 0 and 1")
+            raise TypeError(err_msg)
+        if not 0 <= new_alpha <= 1:
+            err_msg = (f"[{self._error_trace()}] `alpha` must be a numeric "
+                       f"between 0 and 1 (received {new_alpha})")
+            raise ValueError(err_msg)
+        text.set_alpha(new_alpha)
+
+    @property
+    def autowrap(self) -> bool:
+        text = self._get_text_obj()
+        if text:
+            return text.get_wrap()
+        return None
+
+    @autowrap.setter
+    def autowrap(self, new_wrap: bool) -> None:
+        text = self._get_text_obj(error=True)
+        if not isinstance(new_wrap, bool):
+            err_msg = f"[{self._error_trace()}] `autowrap` must be a boolean"
+            raise TypeError(err_msg)
+        text.set_wrap(new_wrap)
+        self._get_figure().tight_layout()
+
+    @property
+    def color(self) -> tuple[float, float, float]:
+        text = self._get_text_obj()
+        if text:
+            return to_rgb(text.get_color())  # converts named colors
+        return None
+
+    @color.setter
+    def color(
+        self, new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
+    ) -> None:
+        text = self._get_text_obj(error=True)
+        if not isinstance(new_color, (str, tuple)):
+            err_msg = (f"[{self._error_trace()}] `color` must be either a "
+                       f"string or tuple of numeric RGB values")
+            raise TypeError(err_msg)
+        if isinstance(new_color, tuple):
+            if (len(new_color) != 3 or
+                not all(isinstance(v, (int, float)) for v in new_color) or
+                not all(0 <= v <= 1 for v in new_color)):
+                err_msg = (f"[{self._error_trace()}] when passing RGB values, "
+                           f"`color` must be a tuple of length 3 containing "
+                           f"floats between 0 and 1 (received {new_color})")
+                raise ValueError(err_msg)
+        text.set_color(new_color)
+
+    @property
+    def font(self) -> str:
+        text = self._get_text_obj()
+        if text:
+            return text.get_fontfamily()
+        return None
+
+    @font.setter
+    def font(self, new_font: str) -> None:
+        text = self._get_text_obj(error=True)
+        allowed = self.available_fonts()
+        if not isinstance(new_font, str):
+            allowed_msg = "\n".join(sorted(allowed))
+            err_msg = (f"[{self._error_trace()}] `font` must be a string "
+                       f"referencing one of the available system fonts: "
+                       f"{allowed_msg}")
+            raise TypeError(err_msg)
+        if new_font not in allowed:
+            allowed_msg = "\n".join(sorted(allowed))
+            err_msg = (f"[{self._error_trace()}] `font` must be a string "
+                       f"referencing one of the available system fonts: "
+                       f"{allowed_msg}")
+            raise ValueError(err_msg)
+        text.set_fontfamily(new_font)
+        self._get_figure().tight_layout()
+
+    """TODO: replace *_alignment fields with generic alignment field"""
+    @property
+    def horizontal_alignment(self) -> str:
+        text = self._get_text_obj()
+        if text:
+            return text.get_horizontalalignment()
+        return None
+
+    @horizontal_alignment.setter
+    def horizontal_alignment(self, new_horizontal_alignment: str) -> None:
+        text = self._get_text_obj(error=True)
+        allowed = {"center", "right", "left"}
+        if not isinstance(new_horizontal_alignment, str):
+            err_msg = (f"[{self._error_trace()}] `horizontal_alignment` must "
+                       f"be a string with one of the following values: "
+                       f"{allowed}")
+            raise TypeError(err_msg)
+        if new_horizontal_alignment not in allowed:
+            err_msg = (f"[{self._error_trace()}] `horizontal_alignment` must "
+                       f"be a string with one of the following values: "
+                       f"{allowed}")
+            raise ValueError(err_msg)
+        text.set_horizontalalignment(new_horizontal_alignment)
+        self._get_figure().tight_layout()
+
+    @property
+    def rotation(self) -> float:
+        text = self._get_text_obj()
+        if text:
+            return text.get_rotation()
+        return None
+
+    @rotation.setter
+    def rotation(self, new_rotation: NUMERIC) -> None:
+        text = self._get_text_obj(error=True)
+        if not isinstance(new_rotation, (int, float)):
+            err_msg = (f"[{self._error_trace}] `rotation` must be a numeric "
+                       f"representing the counterclockwise rotation angle in "
+                       f"degrees (0 = horizontal, 90 = vertical)")
+            raise TypeError(err_msg)
+        text.set_rotation(new_rotation)
+        self._get_figure().tight_layout()
+
+    @property
+    def line_spacing(self) -> float:
+        text = self._get_text_obj()
+        if text:
+            return text.get_linespacing()
+        return None
+
+    @line_spacing.setter
+    def line_spacing(self, new_line_spacing: NUMERIC) -> None:
+        text = self._get_text_obj(error=True)
+        if not isinstance(new_line_spacing, (int, float)):
+            err_msg = (f"[{self._error_trace()}] `line_spacing` must be a "
+                       f"numeric >= 1 representing a multiple of `font_size`")
+            raise TypeError(err_msg)
+        if not new_line_spacing >= 1:
+            err_msg = (f"[{self._error_trace()}] `line_spacing` must be a "
+                       f"numeric >= 1 representing a multiple of `font_size`")
+            raise ValueError(err_msg)
+        text.set_linespacing(new_line_spacing)
+        self._get_figure().tight_layout()
+
+    @property
+    def position(self) -> tuple[float, float]:
+        text = self._get_text_obj()
+        if text:
+            return text.get_position()
+        return None
+
+    @position.setter
+    def position(self, new_position: tuple[NUMERIC, NUMERIC]) -> None:
+        text = self._get_text_obj(error=True)
+        if not isinstance(new_position, tuple):
+            err_msg = (f"[{self._error_trace()}] `position` must be an (x, y) "
+                       f"tuple of length 2 containing only numeric values")
+            raise TypeError(err_msg)
+        if (len(new_position) != 2 or
+            not all(isinstance(v, (int, float)) for v in new_position) or
+            not all(v > 0 for v in new_position)):
+            err_msg = (f"[{self._error_trace()}] `position` must be an (x, y) "
+                       f"tuple of length 2 containing only numeric values "
+                       f"(received: {new_position})")
+            raise ValueError(err_msg)
+        text.set_position(new_position)
+        self._get_figure().tight_layout()
+
+    @property
+    def size(self) -> float:
+        text = self._get_text_obj()
+        if text:
+            return text.get_fontsize()
+        return None
+
+    @size.setter
+    def size(self, new_size: NUMERIC) -> None:
+        text = self._get_text_obj(error=True)
+        if not isinstance(new_size, (int, float)):
+            err_msg = f"[{self._error_trace()}] `size` must be a numeric > 0"
+            raise TypeError(err_msg)
+        if not new_size > 0:
+            err_msg = f"[{self._error_trace()}] `size` must be > 0"
+            raise ValueError(err_msg)
+        text.set_size(new_size)
+        self._get_figure().tight_layout()
+
+    @property
+    def text(self) -> str:
+        """Return figure title (not related to any subplot)."""
+        text = self._get_text_obj()
+        if text:
+            return text.get_text()
+        return None
+
+    @text.setter
+    def text(self, new_text: str) -> None:
+        """Set figure title (not related to any subplot)."""
+        text = self._get_text_obj(error=True)
+        if not isinstance(new_text, str):
+            err_msg = f"[{self._error_trace()}] `text` must be a string"
+            raise TypeError(err_msg)
+        text.set_text(new_text)
+
+    @property
+    def vertical_alignment(self) -> str:
+        text = self._get_text_obj()
+        if text:
+            return text.get_verticalalignment()
+        return None
+
+    @vertical_alignment.setter
+    def vertical_alignment(self, new_vertical_alignment: str) -> None:
+        text = self._get_text_obj(error=True)
+        allowed = {"center", "top", "bottom", "baseline", "center_baseline"}
+        if not isinstance(new_vertical_alignment, str):
+            err_msg = (f"[{self._error_trace()}] `vertical_alignment` must be "
+                       f"a string (allowed values: {allowed})")
+            raise TypeError(err_msg)
+        if new_vertical_alignment not in allowed:
+            err_msg = (f"[{self._error_trace()}] `vertical_alignment` must be "
+                       f"one of the following: {allowed} (received "
+                       f"'{new_vertical_alignment}')")
+            raise ValueError(err_msg)
+        text.set_verticalalignment(new_vertical_alignment)
+        self._get_figure().tight_layout()
+
+    @property
+    def visible(self) -> bool:
+        text = self._get_text_obj()
+        if text:
+            return text.get_visible()
+        return None
+
+    @visible.setter
+    def visible(self, new_visible: bool) -> None:
+        text = self._get_text_obj(error=True)
+        if not isinstance(new_visible, bool):
+            err_msg = (f"[{self._error_trace()}] `visible` must be a "
+                        f"boolean")
+            raise TypeError(err_msg)
+        text.set_visible(new_visible)
+        self._get_figure().tight_layout()
+
+    @property
+    def weight(self) -> str:
+        text = self._get_text_obj()
+        if text:
+            return text.get_weight()
+        return None
+
+    @weight.setter
+    def weight(self, new_weight: str) -> None:
+        text = self._get_text_obj(error=True)
+        allowed = {"ultralight", "light", "normal", "regular", "book", "medium",
+                   "roman", "semibold", "demibold", "demi", "bold", "heavy",
+                   "extra bold", "black"}
+        if not isinstance(new_weight, str):
+            err_msg = (f"[{self._error_trace()}] `weight` must be a string "
+                       f"(allowed values: {allowed})")
+            raise TypeError(err_msg)
+        if new_weight not in allowed:
+            err_msg = (f"[{self._error_trace()}] `weight` must be one of the "
+                       f"following: {allowed} (received '{new_weight}')")
+            raise ValueError(err_msg)
+        text.set_fontweight(new_weight)
+        self._get_figure().tight_layout()
+
+    def _error_trace(self, stack_index: int = 1) -> str:
+        """Returns a quick stack trace in the event of an error."""
+        parent_class = self.parent.__class__.__name__
+        self_class = self.__class__.__name__
+        calling_function = inspect.stack()[stack_index].function
+        return f"{parent_class}.{self_class}.{calling_function}"
+
+    # OVERRIDE THIS
+    def _get_figure(self) -> mpl.figure.Figure:
+        """Return the matplotlib.figure.Figure instance associated with this
+        object.
+
+        This method must be overriden with a custom accessor that points from
+        the current DynamicText object to the appropriate
+        matplotlib.figure.Figure instance.  The route to access this will be
+        different depending on the location of the text being modified
+        (e.g. Figure suptitles vs. Axes labels vs. Legend text).
+
+        When using self._error_trace() with this method, remember to set
+        `stack_index=2`.
+        """
+        raise NotImplementedError()
+
+    # OVERRIDE THIS
+    def _get_text_obj(self, error: bool = False) -> mpl.text.Text:
+        """Return the matplotlib.text.Text instance associated with this object.
+
+        This method must be overriden with a custom accessor that points from
+        the current DynamicText object to the appropriate matplotlib.text.Text
+        instance.  The route to access this will be different depending on the
+        location of the text being modified (e.g. Figure suptitles vs. Axes
+        labels vs. Legend text).
+
+        When using self._error_trace() with this method, remember to set
+        `stack_index=2`.
+        """
+        raise NotImplementedError()
+
+    def available_fonts(self) -> set[str]:
+        return set(get_font(fpath).family_name for fpath in findSystemFonts())
+
+    def __str__(self) -> str:
+        return self.text
 
 
 class DynamicAxes:
@@ -512,149 +840,21 @@ class DynamicFigure:
             self.rows = rows
             self.cols = cols
 
-    class Title:
-        """Meant to make changing title sizes/colors easier
-
-        text fields:
-        https://matplotlib.org/stable/api/text_api.html#matplotlib.text.Text
-        """
-
-        def __init__(self, parent: DynamicFigure):
-            self.parent = parent
-            self.parent_class = self.parent.__class__.__name__
-            self.self_class = self.__class__.__name__
-
-        @property
-        def alpha(self) -> float:
-            if hasattr(self.parent.fig, "_suptitle"):
-                result = self.parent.fig._suptitle.get_alpha()
-                if result is None:
-                    return 1.0
-                return result
-            return None
-
-        @alpha.setter
-        def alpha(self, new_alpha: float) -> None:
-            if not hasattr(self.parent.fig, "_suptitle"):
-                err_msg = (f"[{self.__class__.__name__}.title.alpha] Could "
-                           f"not set title alpha: figure has no title")
-                raise RuntimeError(err_msg)
-            if not isinstance(new_alpha, float):
-                err_msg = (f"[{self.__class__.__name__}.title.alpha] `alpha` "
-                           f"must be a float")
-                raise TypeError(err_msg)
-            if not 0 <= new_alpha <= 1:
-                err_msg = (f"[{self.__class__.__name__}.title.alpha] `alpha` "
-                           f"must be between 0 and 1 (received: {new_alpha})")
-                raise ValueError(err_msg)
-            self.parent.fig._suptitle.set_alpha(new_alpha)
-
-        @property
-        def autowrap(self) -> bool:
-            raise NotImplementedError()
-
-        @autowrap.setter
-        def autowrap(self, new_wrap: bool) -> None:
-            raise NotImplementedError()
-
-        @property
-        def color(self) -> tuple[float, float, float]:
-            if hasattr(self.parent.fig, "_suptitle"):
-                return to_rgb(self.parent.fig._suptitle.get_color())
-            return None
-
-        @color.setter
-        def color(
-            self,
-            new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
-        ) -> None:
-            if not hasattr(self.parent.fig, "_suptitle"):
-                err_msg = (f"[{self.parent_class}.{self.self_class}.color] "
-                           f"Could not set title color: figure has no title")
-                raise RuntimeError(err_msg)
-            if not any(isinstance(new_color, t) for t in [str, tuple]):
-                err_msg = (f"[{self.parent_class}.{self.self_class}.color] "
-                           f"`color` must be either a string or tuple of "
-                           f"numeric RGB values")
-                raise TypeError(err_msg)
-            if isinstance(new_color, tuple):
-                if (len(new_color) != 3 or
-                    not all(isinstance(v, (int, float)) for v in new_color) or
-                    not all(0 <= v <= 1 for v in new_color)):
-                    err_msg = (f"[{self.parent_class}.{self.self_class}.color] "
-                               f"when passing RGB values, `color` must be a "
-                               f"tuple of length 3 containing floats between "
-                               f"0 and 1 (received {new_color})")
-                    raise ValueError(err_msg)
-            return self.parent.fig._suptitle.set_color(new_color)
-
-        @property
-        def font(self) -> str:
-            raise NotImplementedError()
-
-        @font.setter
-        def font(self) -> None:
-            available_fonts = [get_font(p) for p in findSystemFonts()]
-            raise NotImplementedError()
-
-        """TODO: replace *_alignment fields with generic alignment field"""
-        @property
-        def horizontal_alignment(self) -> str:
-            if hasattr(self.parent.fig, "_suptitle"):
-                return self.parent.fig._suptitle.get_horizontalalignment()
-            return None
-
-        @horizontal_alignment.setter
-        def horizontal_alignment(self, new_horizontal_alignment: str) -> None:
-            raise NotImplementedError()
-
-        @property
-        def rotation(self) -> float:
-            raise NotImplementedError()
-
-        @rotation.setter
-        def rotation(self, new_rotation: float) -> None:
-            raise NotImplementedError()
-
-        @property
-        def line_spacing(self) -> float:
-            raise NotImplementedError()
-
-        @line_spacing.setter
-        def line_spacing(self, new_line_spacing: float) -> None:
-            raise NotImplementedError()
-
-        @property
-        def position(self) -> tuple[float, float]:
-            raise NotImplementedError()
-
-        @position.setter
-        def position(self, new_position: tuple[float, float]) -> None:
-            raise NotImplementedError()
-
-        @property
-        def size(self) -> float:
-            if hasattr(self.parent.fig, "_suptitle"):
-                return self.parent.fig._suptitle.get_fontsize()
-            return None
-
-        @size.setter
-        def size(self, new_size: float) -> None:
-            raise NotImplementedError()
+    class Title(DynamicText):
 
         @property
         def text(self) -> str:
             """Return figure title (not related to any subplot)."""
-            if hasattr(self.parent.fig, "_suptitle"):
-                return self.parent.fig._suptitle.get_text()
+            text = self._get_text_obj()
+            if text:
+                return text.get_text()
             return None
 
         @text.setter
         def text(self, new_text: str) -> None:
             """Set figure title (not related to any subplot)."""
             if not isinstance(new_text, str):
-                err_msg = (f"[{self.parent_class}.{self.self_class}.text] "
-                           f"`text` must be a string")
+                err_msg = (f"[{self._error_trace()}] `text` must be a string")
                 raise TypeError(err_msg)
             self.parent.fig.suptitle(new_text)
             self.parent.fig.tight_layout()
@@ -662,68 +862,33 @@ class DynamicFigure:
             if all(c <= self.parent.color_cutoff for c in rgb_vals):
                 self.color = "white"  # convert to white to maintain contrast
 
-        @property
-        def vertical_alignment(self) -> str:
-            if hasattr(self.parent.fig, "_suptitle"):
-                return self.parent.fig._suptitle.get_verticalalignment()
-            return None
+        def _get_figure(self) -> mpl.figure.Figure:
+            """Returns the matplotlib.figure.Figure instance referenced by this
+            object.  A helper method like this helps maintain a D.R.Y. and
+            easily extensible codebase.
+            """
+            return self.parent.fig
 
-        @vertical_alignment.setter
-        def vertical_alignment(self, new_vertical_alignment: str) -> None:
-            if not hasattr(self.parent.fig, "_suptitle"):
-                err_msg = (f"[{self.parent_class}.{self.self_class}."
-                           f"vertical_alignment] Could not set title vertical "
-                           f"alignment: figure has no title")
-                raise RuntimeError(err_msg)
-            if not isinstance(new_vertical_alignment, str):
-                err_msg = (f"[{self.parent_class}.{self.self_class}."
-                           f"vertical_alignment] `vertical_alignment` must be "
-                           f"a string")
-                raise TypeError(err_msg)
-            allowed_vals = {"center", "top", "bottom", "baseline",
-                            "center_baseline"}
-            if new_vertical_alignment not in allowed_vals:
-                err_msg = (f"[{self.parent_class}.{self.self_class}."
-                           f"vertical_alignment] `vertical_alignment` must be "
-                           f"one of the following: {allowed_vals} (received: "
-                           f"{new_vertical_alignment})")
-                raise ValueError(err_msg)
-            self.parent.fig._suptitle.set_verticalalignment(
-                new_vertical_alignment
-            )
-            self.parent.fig.tight_layout()
+        def _get_text_obj(self, error: bool = False) -> mpl.text.Text:
+            """Returns the matplotlib.text.Text instance referenced by this
+            object.  A helper method like this helps maintain a D.R.Y. and
+            easily extensible codebase.
 
-        @property
-        def visible(self) -> bool:
-            if hasattr(self.parent.fig, "_suptitle"):
-                return self.parent.fig._suptitle.get_visible()
-            return False
-
-        @visible.setter
-        def visible(self, new_visible: bool) -> None:
-            if not hasattr(self.parent.fig, "_suptitle"):
-                err_msg = (f"[{self.parent_class}.{self.self_class}.visible] "
-                           f"Could not set title visibility: figure has no "
-                           f"title")
-                raise RuntimeError(err_msg)
-            if not isinstance(new_visible, bool):
-                err_msg = (f"[{self.parent_class}.{self.self_class}.visible] "
-                           f"`visible` must be a boolean")
-                raise TypeError(err_msg)
-            self.parent.fig._suptitle.set_visible(new_visible)
-            self.parent.fig.tight_layout()
-
-        @property
-        def weight(self) -> str:
-            if hasattr(self.parent.fig, "_suptitle"):
-                return self.parent.fig._suptitle.get_weight()
-            return None
-
-        @weight.setter
-        def weight(self, new_weight: str) -> None:
-            allowed_vals = {"ultralight", "light", "normal", "regular", "book",
-                            "medium", "roman", "semibold", "demibold", "demi",
-                            "bold", "heavy", "extra bold", "black"}
+            If `error=True`, raises a generic RuntimeError if the
+            text object is None, which occurs when a title has not yet been
+            set for the current figure.
+            """
+            attr_obj = self._get_figure()
+            attr_name = "_suptitle"
+            if hasattr(attr_obj, attr_name):
+                result = getattr(attr_obj, attr_name)
+                if not result and error:
+                    err_msg = f"[{self._error_trace(2)}] figure has no title "
+                    raise RuntimeError(err_msg)
+                return result
+            err_msg = (f"[{self._error_trace(2)}] Unexpected error: figure has "
+                       f"no {attr_name} attribute (fatal)")
+            raise RuntimeError(err_msg)
 
 
 if __name__ == "__main__":
@@ -733,8 +898,8 @@ if __name__ == "__main__":
     dfig.title = "test"
     dfig.background.color = (0.2, 0.2, 0.2)
     print(dfig.title.text)
-    print(dfig.title.vertical_alignment)
-    dfig.title.vertical_alignment = "bottom"
-    print(dfig.title.vertical_alignment)
+    # print(dfig.title.weight)
+    # dfig.title.vertical_alignment = "bottom"
+    # print(dfig.title.vertical_alignment)
     dfig.save(Path("CurveFit_test.png"))
-    print(dfig)
+    # print(dfig)

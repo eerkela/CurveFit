@@ -1,8 +1,8 @@
 from __future__ import annotations
 import inspect
-from math import ceil, floor
+from math import ceil
 from pathlib import Path
-from typing import Type, Union
+from typing import Union
 
 import matplotlib as mpl
 from matplotlib.colors import to_rgb
@@ -21,7 +21,7 @@ class DynamicText:
 
     @property
     def alpha(self) -> float:
-        text = self.get_text_obj()
+        text = self._get_text_obj()
         if text:
             result = text.get_alpha()
             if result is None:
@@ -88,7 +88,7 @@ class DynamicText:
     def font(self) -> str:
         text = self._get_text_obj()
         if text:
-            return text.get_fontfamily()
+            return text.get_fontfamily()[0]  # should only ever have 1 font
         return None
 
     @font.setter
@@ -155,6 +155,7 @@ class DynamicText:
 
     @property
     def line_spacing(self) -> float:
+        # TODO: Text has no get_linespacing() method, apparently
         text = self._get_text_obj()
         if text:
             return text.get_linespacing()
@@ -186,14 +187,15 @@ class DynamicText:
         text = self._get_text_obj(error=True)
         if not isinstance(new_position, tuple):
             err_msg = (f"[{self._error_trace()}] `position` must be an (x, y) "
-                       f"tuple of length 2 containing only numeric values")
+                       f"tuple of length 2 containing only numeric values "
+                       f"between 0 and 1")
             raise TypeError(err_msg)
         if (len(new_position) != 2 or
             not all(isinstance(v, (int, float)) for v in new_position) or
-            not all(v > 0 for v in new_position)):
+            not all(0 <= v <= 1 for v in new_position)):
             err_msg = (f"[{self._error_trace()}] `position` must be an (x, y) "
                        f"tuple of length 2 containing only numeric values "
-                       f"(received: {new_position})")
+                       f"between 0 and 1 (received: {new_position})")
             raise ValueError(err_msg)
         text.set_position(new_position)
         self._get_figure().tight_layout()
@@ -897,9 +899,17 @@ if __name__ == "__main__":
     dfig = DynamicFigure("test_plot", fig)
     dfig.title = "test"
     dfig.background.color = (0.2, 0.2, 0.2)
-    print(dfig.title.text)
-    # print(dfig.title.weight)
-    # dfig.title.vertical_alignment = "bottom"
-    # print(dfig.title.vertical_alignment)
+    print(f"Title alpha: {dfig.title.alpha}")
+    print(f"Title autowrap: {dfig.title.autowrap}")
+    print(f"Title color: {dfig.title.color}")
+    print(f"Title font: {dfig.title.font}")
+    print(f"Title horizontal_alignment: {dfig.title.horizontal_alignment}")
+    print(f"Title rotation: {dfig.title.rotation}")
+    # print(f"Title line_spacing: {dfig.title.line_spacing}")
+    print(f"Title position: {dfig.title.position}")
+    print(f"Title size: {dfig.title.size}")
+    print(f"Title text: {dfig.title}")
+    print(f"Title vertical_alignment: {dfig.title.vertical_alignment}")
+    print(f"Title visible: {dfig.title.visible}")
+    print(f"Title weight: {dfig.title.weight}")
     dfig.save(Path("CurveFit_test.png"))
-    # print(dfig)

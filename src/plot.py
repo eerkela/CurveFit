@@ -2,11 +2,10 @@ from __future__ import annotations
 import inspect
 from math import ceil
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import matplotlib as mpl
 from matplotlib.colors import to_rgb
-from matplotlib.font_manager import findSystemFonts, get_font
 from matplotlib.gridspec import GridSpec, SubplotSpec
 import matplotlib.pyplot as plt
 
@@ -343,7 +342,19 @@ class DynamicText:
         raise NotImplementedError()
 
     def available_fonts(self) -> set[str]:
-        return set(get_font(fpath).family_name for fpath in findSystemFonts())
+        # matplotlib.font_manager.findSystemFonts() is a bit greedy and often
+        # returns fonts that cannot actually be used by
+        # matplotlib.text.Text.set_fontfamily()
+        available = set()
+        for fpath in mpl.font_manager.findSystemFonts():
+            try:
+                font_family = mpl.font_manager.get_font(fpath).family_name
+                font_prop = mpl.font_manager.FontProperties(font_family)
+                mpl.font_manager.findfont(font_prop, fallback_to_default=False)
+                available.add(font_family)
+            except ValueError:
+                continue
+        return available
 
     def __str__(self) -> str:
         return self.text
@@ -875,9 +886,9 @@ class DynamicFigure:
             return None
 
         @text.setter
-        def text(self, new_text: str) -> None:
+        def text(self, new_text: Optional[str]) -> None:
             """Set figure title (not related to any subplot)."""
-            if not isinstance(new_text, str):
+            if not isinstance(new_text, (str, type(None))):
                 err_msg = (f"[{self._error_trace()}] `text` must be a string")
                 raise TypeError(err_msg)
             if not new_text:  # new_text is empty or None
@@ -888,7 +899,6 @@ class DynamicFigure:
                 if all(c <= self.parent.color_cutoff for c in rgb_vals):
                     self.color = "white"  # white text on dark background
             self.parent.fig.tight_layout()
-            
 
         def _get_figure(self) -> mpl.figure.Figure:
             """Returns the matplotlib.figure.Figure instance referenced by this
@@ -924,18 +934,29 @@ if __name__ == "__main__":
     fig, axes = plt.subplots(2, 3)
     dfig = DynamicFigure("test_plot", fig)
     dfig.title = "test"
-    dfig.background.color = (0.2, 0.2, 0.2)
+    dfig.title.alpha = 0.5
     print(f"Title alpha: {dfig.title.alpha}")
+    dfig.title.autowrap = True
     print(f"Title autowrap: {dfig.title.autowrap}")
+    dfig.background.color = (0.2, 0.2, 0.2)
     print(f"Title color: {dfig.title.color}")
+    dfig.title.font = "Liberation Serif"
     print(f"Title font: {dfig.title.font}")
+    dfig.title.horizontal_alignment = "left"
     print(f"Title horizontal_alignment: {dfig.title.horizontal_alignment}")
+    dfig.title.rotation = 10
     print(f"Title rotation: {dfig.title.rotation}")
+    dfig.title.line_spacing = 1.4
     print(f"Title line_spacing: {dfig.title.line_spacing}")
+    dfig.title.position = (0.4, 0.94)
     print(f"Title position: {dfig.title.position}")
+    dfig.title.size = 14
     print(f"Title size: {dfig.title.size}")
     print(f"Title text: {dfig.title}")
+    dfig.title.vertical_alignment = "top"
     print(f"Title vertical_alignment: {dfig.title.vertical_alignment}")
     print(f"Title visible: {dfig.title.visible}")
+    dfig.title.weight = "bold"
     print(f"Title weight: {dfig.title.weight}")
+    dfig.title = None
     dfig.save(Path("CurveFit_test.png"))

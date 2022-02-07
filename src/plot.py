@@ -12,12 +12,16 @@ import matplotlib.pyplot as plt
 
 
 NUMERIC = Union[int, float]
+NUMERIC_TYPECHECK = (int, float)
 
 
 class DynamicText:
 
     def __init__(self, parent):
         self.parent = parent
+        # matplotlib.text.Text apparently doesn't have a get_linespacing method
+        # see matplotlib.text.Text.set_linespacing if default changes in future
+        self._line_spacing = 1.2  # matplotlib default value (02/07/2022)
 
     @property
     def alpha(self) -> float:
@@ -32,7 +36,7 @@ class DynamicText:
     @alpha.setter
     def alpha(self, new_alpha: NUMERIC) -> None:
         text = self._get_text_obj(error=True)
-        if not isinstance(new_alpha, (int, float)):
+        if not isinstance(new_alpha, NUMERIC_TYPECHECK):
             err_msg = (f"[{self._error_trace()}] `alpha` must be a numeric "
                        f"between 0 and 1")
             raise TypeError(err_msg)
@@ -76,7 +80,7 @@ class DynamicText:
             raise TypeError(err_msg)
         if isinstance(new_color, tuple):
             if (len(new_color) != 3 or
-                not all(isinstance(v, (int, float)) for v in new_color) or
+                not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
                 not all(0 <= v <= 1 for v in new_color)):
                 err_msg = (f"[{self._error_trace()}] when passing RGB values, "
                            f"`color` must be a tuple of length 3 containing "
@@ -145,7 +149,7 @@ class DynamicText:
     @rotation.setter
     def rotation(self, new_rotation: NUMERIC) -> None:
         text = self._get_text_obj(error=True)
-        if not isinstance(new_rotation, (int, float)):
+        if not isinstance(new_rotation, NUMERIC_TYPECHECK):
             err_msg = (f"[{self._error_trace}] `rotation` must be a numeric "
                        f"representing the counterclockwise rotation angle in "
                        f"degrees (0 = horizontal, 90 = vertical)")
@@ -155,16 +159,15 @@ class DynamicText:
 
     @property
     def line_spacing(self) -> float:
-        # TODO: Text has no get_linespacing() method, apparently
         text = self._get_text_obj()
         if text:
-            return text.get_linespacing()
+            return self._line_spacing  # no get_linespacing() method
         return None
 
     @line_spacing.setter
     def line_spacing(self, new_line_spacing: NUMERIC) -> None:
         text = self._get_text_obj(error=True)
-        if not isinstance(new_line_spacing, (int, float)):
+        if not isinstance(new_line_spacing, NUMERIC_TYPECHECK):
             err_msg = (f"[{self._error_trace()}] `line_spacing` must be a "
                        f"numeric >= 1 representing a multiple of `font_size`")
             raise TypeError(err_msg)
@@ -172,7 +175,8 @@ class DynamicText:
             err_msg = (f"[{self._error_trace()}] `line_spacing` must be a "
                        f"numeric >= 1 representing a multiple of `font_size`")
             raise ValueError(err_msg)
-        text.set_linespacing(new_line_spacing)
+        self._line_spacing = float(new_line_spacing)
+        text.set_linespacing(self._line_spacing)
         self._get_figure().tight_layout()
 
     @property
@@ -191,7 +195,7 @@ class DynamicText:
                        f"between 0 and 1")
             raise TypeError(err_msg)
         if (len(new_position) != 2 or
-            not all(isinstance(v, (int, float)) for v in new_position) or
+            not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_position) or
             not all(0 <= v <= 1 for v in new_position)):
             err_msg = (f"[{self._error_trace()}] `position` must be an (x, y) "
                        f"tuple of length 2 containing only numeric values "
@@ -210,7 +214,7 @@ class DynamicText:
     @size.setter
     def size(self, new_size: NUMERIC) -> None:
         text = self._get_text_obj(error=True)
-        if not isinstance(new_size, (int, float)):
+        if not isinstance(new_size, NUMERIC_TYPECHECK):
             err_msg = f"[{self._error_trace()}] `size` must be a numeric > 0"
             raise TypeError(err_msg)
         if not new_size > 0:
@@ -438,11 +442,10 @@ class DynamicFigure:
     def __init__(self,
                  label: str,
                  figure: plt.Figure = None,
-                 max_columns: int = 4,
                  **kwargs):
         if label in self.observed_labels:
-            err_msg = (f"[{self.__class__.__name__}.init] `label` must be "
-                       f"unique (observed: {self.observed_labels}, received: "
+            err_msg = (f"[{self._error_trace()}] `label` must be unique "
+                       f"(observed: {self.observed_labels}, received: "
                        f"'{label}')")
             raise ValueError(err_msg)
         if figure is None:
@@ -452,14 +455,13 @@ class DynamicFigure:
         self.label = label
         self.observed_labels.add(self.label)
         self.fig.set_label(self.label)
-        self.max_columns = max_columns
         self.fig.tight_layout()
         for k, v in kwargs.items():
             self.__setattr__(k, v)
         self._background = DynamicFigure.Background(self)
         self._border = DynamicFigure.Border(self)
+        self._grid = DynamicFigure.SubplotGrid(self)
         self._title = DynamicFigure.Title(self)
-        # TODO: keeping these public might be a problem.
 
     @property
     def background(self) -> DynamicFigure.Background:
@@ -472,12 +474,23 @@ class DynamicFigure:
         return self._border
 
     @property
+    def contents(self) -> list[DynamicAxes]:
+        """Return the subplot contents of this figure."""
+        return [DynamicAxes(ax) for ax in self.fig.axes]
+
+    @property
     def dpi(self) -> float:
-        raise NotImplementedError()
+        return self.fig.get_dpi()
 
     @dpi.setter
-    def dpi(self, new_dpi: float) -> None:
-        raise NotImplementedError()
+    def dpi(self, new_dpi: NUMERIC) -> None:
+        if not isinstance(new_dpi, NUMERIC_TYPECHECK):
+            err_msg = f"[{self._error_trace()}] `dpi` must be a numeric > 0"
+            raise TypeError(err_msg)
+        if new_dpi <= 0:
+            err_msg = f"[{self._error_trace()}] `dpi` must be a numeric > 0"
+            raise ValueError(err_msg)
+        self.fig.set_dpi(new_dpi)
 
     @property
     def height(self) -> float:
@@ -485,19 +498,21 @@ class DynamicFigure:
         return self.fig.get_figheight()
 
     @height.setter
-    def height(self, new_height: float) -> None:
+    def height(self, new_height: NUMERIC) -> None:
         """Set figure height in inches."""
-        if not isinstance(new_height, float):
-            err_msg = (f"[{self.__class__.__name__}.height] `height` must be "
-                       f"a float")
+        if not isinstance(new_height, NUMERIC_TYPECHECK):
+            err_msg = f"[{self._error_trace()}] `height` must be a numeric > 0"
             raise TypeError(err_msg)
         if new_height <= 0:
-            err_msg = (f"[{self.__class__.__name__}.height] `height` must be "
-                       f"> 0")
+            err_msg = f"[{self._error_trace()}] `height` must be a numeric > 0"
             raise ValueError(err_msg)
         # resize elements of axes
         self.fig.set_figheight(new_height)
         self.fig.tight_layout()
+
+    @property
+    def subplot_grid(self) -> DynamicFigure.SubplotGrid:
+        return self._grid
 
     @property
     def title(self) -> DynamicFigure.Title:
@@ -515,25 +530,29 @@ class DynamicFigure:
         return self.fig.get_figwidth()
 
     @width.setter
-    def width(self, new_width: float) -> None:
+    def width(self, new_width: NUMERIC) -> None:
         """Set figure width in inches."""
-        if not isinstance(new_width, float):
-            err_msg = (f"[{self.__class__.__name__}.width] `width` must be a "
-                       f"float")
+        if not isinstance(new_width, NUMERIC_TYPECHECK):
+            err_msg = f"[{self._error_trace()}] `width` must be a numeric > 0"
             raise TypeError(err_msg)
         if new_width <= 0:
-            err_msg = (f"[{self.__class__.__name__}.width] `width` must be "
-                       f"> 0")
+            err_msg = f"[{self._error_trace()}] `width` must be a numeric > 0"
             raise ValueError(err_msg)
         # resize elements of axes
         self.fig.set_figwidth(new_width)
         self.fig.tight_layout()
 
+    def _error_trace(self, stack_index: int = 1) -> str:
+        """Returns a quick stack trace in the event of an error."""
+        self_class = self.__class__.__name__
+        calling_function = inspect.stack()[stack_index].function
+        return f"{self_class}.{calling_function}"
+
     def save(self, save_to: Union[Path, str]) -> None:
         """Save this figure to given path."""
         if not any(issubclass(type(save_to), t) for t in [Path, str]):
-            err_msg = (f"[{self.__class__.__name__}.save] `save_to` must be "
-                       f"either a string or Path-like object")
+            err_msg = (f"[{self._error_trace()}] `save_to` must be either a "
+                       f"string or Path-like object")
             raise TypeError(err_msg)
         self.set_active()
         plt.savefig(save_to)
@@ -564,10 +583,10 @@ class DynamicFigure:
     def __str__(self) -> str:
         """Returns a quick string identifier for this figure."""
         if self.__len__() > 1:  # plural
-            return (f"{self.label} ({self.rows}x{self.columns}, "
-                    f"{self.__len__()} subplots)")
-        return (f"{self.label} ({self.rows}x{self.columns}, "
-                f"{self.__len__()} subplot)")
+            return (f"{self.label} ({self.subplot_grid.rows}x"
+                    f"{self.subplot_grid.columns}, {self.__len__()} subplots)")
+        return (f"{self.label} ({self.subplot_grid.rows}x"
+                f"{self.subplot_grid.columns}, {self.__len__()} subplot)")
 
     def __sub__(self, axes: DynamicAxes) -> DynamicFigure:
         """Remove an axis/subplot from this figure."""
@@ -619,7 +638,7 @@ class DynamicFigure:
                 raise TypeError(err_msg)
             if isinstance(new_color, tuple):
                 if (len(new_color) != 3 or
-                    not all(isinstance(v, (int, float)) for v in new_color) or
+                    not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
                     not all(0 <= v <= 1 for v in new_color)):
                     err_msg = (f"[{self.parent_class}.{self.self_class}.color] "
                                f"when passing RGB values, `color` must be a "
@@ -678,7 +697,7 @@ class DynamicFigure:
                 raise TypeError(err_msg)
             if isinstance(new_color, tuple):
                 if (len(new_color) != 3 or
-                    not all(isinstance(v, (int, float)) for v in new_color) or
+                    not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
                     not all(0 <= v <= 1 for v in new_color)):
                     err_msg = (f"[{self.parent_class}.{self.self_class}.color] "
                                f"when passing RGB values, `color` must be a "
@@ -707,15 +726,49 @@ class DynamicFigure:
 
     class SubplotGrid:
 
+        """Initialize this to a 4-column grid, then have each axes object fill
+        the available space.  This gets rid of the `max_columns` field.
+
+        When a new plot is added to the grid, divide the available space among
+        the subplots.
+            1 plot: 1x4 grid, plot fills all 4 columns
+            2 plots: 1x4 grid, each plot fills 2 columns
+            3 plots: 1x4 grid, each plot fills 1 column, last column empty
+            4 plots: 1x4 grid, each plot fills 1 column
+            5 plots: 2x4 grid, each plot fills 1 column, 3 empty columns in
+                last row
+            ...
+
+        For different numbers of columns:
+            1 column: each plot fills the column
+            2 columns: first plot double fills
+            3 columns: first plot triple fills, second leaves one empty
+            4 columns: see above
+            5 columns: first plot fills all 5 columns, second fills 2 and leaves
+                one empty, third leaves 2 empty, fourth leaves 1
+
+        When empty columns are encountered, use the set_position() method to
+        do fractional fills.  This only applies to the first row.
+
+        Maybe initialize to 12 columns for better divisibility?  Like a CSS
+        layout.
+
+        12-column grid:
+            1 plot/row: plot fills all 12 columns
+            2 plots/row: each plot fills 6 columns
+            3 plots/row: each plot fills 4 columns
+            4 plots/row: each plot fills 3 columns
+            -- autowrap --
+            5 plots/row: 1 padding column on each side, each plot
+                fills 2 columns
+            6 plots/row: each plot fills 2 columns
+            -- autowrap --
+            7+ plots/row: requires custom specification
+        """
+
         def __init__(self, parent: DynamicFigure):
             self.parent = parent
-            self.parent_class = self.parent.__class__.__name__
-            self.self_class = self.__class__.__name__
-
-        @property
-        def axes(self) -> list[DynamicAxes]:
-            """Return the subplot contents of this figure."""
-            return [DynamicAxes(ax) for ax in self.fig.axes]
+            self.gridspec = GridSpec(1, 12)
 
         @property
         def columns(self) -> int:
@@ -748,44 +801,6 @@ class DynamicFigure:
                     new_sps = SubplotSpec(new_gs, index)
                     ax.set_subplotspec(new_sps)
                 self.fig.tight_layout()
-
-        @property
-        def gridspec(self) -> GridSpec:
-            """Return underlying GridSpec object associated with subplot grid."""
-            if len(self.fig.axes) > 0:
-                return self.fig.axes[0].get_subplotspec() \
-                                    .get_topmost_subplotspec() \
-                                    .get_gridspec()
-            return None
-
-        @property
-        def max_columns(self) -> int:
-            """Return maximum number of columns allowed per row, after which
-            auto-wrapping will occur.
-            """
-            if hasattr(self, "_max_columns"):
-                return self._max_columns
-            return 0
-
-        @max_columns.setter
-        def max_columns(self, new_max_columns: int) -> None:
-            """Set the maximum number of columns per row, after which auto-wrapping
-            will occur.
-
-            TODO: is this strictly necessary?
-            """
-            if not isinstance(new_max_columns, int):
-                err_msg = (f"[{self.__class__.__name__}.max_columns] "
-                        f"`max_columns` must be an integer")
-                raise TypeError(err_msg)
-            if new_max_columns < 1:
-                err_msg = (f"[{self.__class__.__name__}.max_columns] "
-                        f"`max_columns` must be >= 1")
-                raise ValueError(err_msg)
-            if (new_max_columns != self.max_columns and
-                new_max_columns < self.columns):
-                self.columns = new_max_columns
-            self._max_columns = new_max_columns
 
         @property
         def rows(self) -> int:
@@ -842,6 +857,13 @@ class DynamicFigure:
             self.rows = rows
             self.cols = cols
 
+        def _error_trace(self, stack_index: int = 1) -> str:
+            """Returns a quick stack trace in the event of an error."""
+            parent_class = self.parent.__class__.__name__
+            self_class = self.__class__.__name__
+            calling_function = inspect.stack()[stack_index].function
+            return f"{parent_class}.{self_class}.{calling_function}"
+
     class Title(DynamicText):
 
         @property
@@ -858,11 +880,15 @@ class DynamicFigure:
             if not isinstance(new_text, str):
                 err_msg = (f"[{self._error_trace()}] `text` must be a string")
                 raise TypeError(err_msg)
-            self.parent.fig.suptitle(new_text)
+            if not new_text:  # new_text is empty or None
+                self.parent.fig._suptitle = None
+            else:
+                self.parent.fig.suptitle(new_text)
+                rgb_vals = self.parent.background.color
+                if all(c <= self.parent.color_cutoff for c in rgb_vals):
+                    self.color = "white"  # white text on dark background
             self.parent.fig.tight_layout()
-            rgb_vals = self.parent.background.color
-            if all(c <= self.parent.color_cutoff for c in rgb_vals):
-                self.color = "white"  # convert to white to maintain contrast
+            
 
         def _get_figure(self) -> mpl.figure.Figure:
             """Returns the matplotlib.figure.Figure instance referenced by this
@@ -905,7 +931,7 @@ if __name__ == "__main__":
     print(f"Title font: {dfig.title.font}")
     print(f"Title horizontal_alignment: {dfig.title.horizontal_alignment}")
     print(f"Title rotation: {dfig.title.rotation}")
-    # print(f"Title line_spacing: {dfig.title.line_spacing}")
+    print(f"Title line_spacing: {dfig.title.line_spacing}")
     print(f"Title position: {dfig.title.position}")
     print(f"Title size: {dfig.title.size}")
     print(f"Title text: {dfig.title}")

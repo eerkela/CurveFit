@@ -14,6 +14,22 @@ NUMERIC = Union[int, float]
 NUMERIC_TYPECHECK = (int, float)
 
 
+def available_fonts() -> set[str]:
+    # matplotlib.font_manager.findSystemFonts() is a bit greedy and often
+    # returns fonts that cannot actually be used by
+    # matplotlib.text.Text.set_fontfamily()
+    available = set()
+    for fpath in mpl.font_manager.findSystemFonts():
+        try:
+            font_family = mpl.font_manager.get_font(fpath).family_name
+            font_prop = mpl.font_manager.FontProperties(font_family)
+            mpl.font_manager.findfont(font_prop, fallback_to_default=False)
+            available.add(font_family)
+        except ValueError:
+            continue
+    return available
+
+
 class DynamicText:
 
     def __init__(self, parent):
@@ -97,7 +113,7 @@ class DynamicText:
     @font.setter
     def font(self, new_font: str) -> None:
         text = self._get_text_obj(error=True)
-        allowed = self.available_fonts()
+        allowed = available_fonts()
         if not isinstance(new_font, str):
             allowed_msg = "\n".join(sorted(allowed))
             err_msg = (f"[{self._error_trace()}] `font` must be a string "
@@ -340,21 +356,6 @@ class DynamicText:
         `stack_index=2`.
         """
         raise NotImplementedError()
-
-    def available_fonts(self) -> set[str]:
-        # matplotlib.font_manager.findSystemFonts() is a bit greedy and often
-        # returns fonts that cannot actually be used by
-        # matplotlib.text.Text.set_fontfamily()
-        available = set()
-        for fpath in mpl.font_manager.findSystemFonts():
-            try:
-                font_family = mpl.font_manager.get_font(fpath).family_name
-                font_prop = mpl.font_manager.FontProperties(font_family)
-                mpl.font_manager.findfont(font_prop, fallback_to_default=False)
-                available.add(font_family)
-            except ValueError:
-                continue
-        return available
 
     def __str__(self) -> str:
         return self.text
@@ -784,68 +785,55 @@ class DynamicFigure:
         @property
         def columns(self) -> int:
             """Return the number of columns for the current subplot grid."""
-            if self.gridspec is not None:
-                return self.gridspec.ncols
-            return None
+            return self.gridspec.ncols
 
         @columns.setter
         def columns(self, new_columns: int) -> None:
             """Set the number of columns for the current subplot grid."""
-            if self.columns is None:
-                err_msg = (f"[{self.__class__.__name__}.columns] Could not set "
-                        f"`columns`: figure has no axes")
-                raise RuntimeError(err_msg)
             if not isinstance(new_columns, int):
-                err_msg = (f"[{self.__class__.__name__}.columns] `columns` must be "
-                        f"an integer")
+                err_msg = (f"[{self._error_trace()}] `columns` must be an "
+                           f"integer >= 1")
                 raise TypeError(err_msg)
             if new_columns < 1:
-                err_msg = (f"[{self.__class__.__name__}.columns] `columns` must be "
-                        f">= 1")
+                err_msg = (f"[{self._error_trace()}] `columns` must be an"
+                           f"integer >= 1")
                 raise ValueError(err_msg)
             # https://stackoverflow.com/questions/22881301/changing-matplotlib-subplot-size-position-after-axes-creation
             if new_columns != self.columns:  # reposition existing axes
-                new_rows = ceil(self.__len__() / new_columns)
-                new_gs = GridSpec(new_rows, new_columns)
-                self.width = self.width * (new_columns / self.columns)
-                for index, ax in enumerate(self.fig.axes):
-                    new_sps = SubplotSpec(new_gs, index)
+                new_rows = ceil(self.parent.__len__() / new_columns)
+                self.gridspec = GridSpec(new_rows, new_columns)
+                # self.width = self.width * (new_columns / self.columns)
+                for index, ax in enumerate(self.parent.fig.axes):
+                    new_sps = SubplotSpec(self.gridspec, index)
                     ax.set_subplotspec(new_sps)
-                self.fig.tight_layout()
+                self.parent.fig.tight_layout()
 
         @property
         def rows(self) -> int:
             """Return total number of rows for current subplot grid."""
-            if self.gridspec is not None:
-                return self.gridspec.nrows
-            return None
+            return self.gridspec.nrows
 
         @rows.setter
         def rows(self, new_rows: int) -> None:
             """Set number of rows for current subplot grid."""
-            if self.rows is None:
-                err_msg = (f"[{self.__class__.__name__}.rows] Could not set "
-                        f"`rows`: figure has no axes")
-                raise RuntimeError(err_msg)
+            min_rows = max(1, ceil(self.parent.__len__() / self.columns))
             if not isinstance(new_rows, int):
-                err_msg = (f"[{self.__class__.__name__}.rows] `rows` must be "
-                        f"an integer")
+                err_msg = (f"[{self._error_trace()}] `rows` must be an integer "
+                           f">= {min_rows}")
                 raise TypeError(err_msg)
-            if new_rows < max(1, ceil(self.__len__() / self.max_columns)):
-                err_msg = (f"[{self.__class__.__name__}.rows] `rows` must be "
-                        f">= {max(1, ceil(self.__len__() / self.max_columns))}")
+            if new_rows < min_rows:
+                err_msg = (f"[{self._error_trace()}] `rows` must be an integer "
+                           f">= {min_rows}")
                 raise ValueError(err_msg)
             # https://stackoverflow.com/questions/22881301/changing-matplotlib-subplot-size-position-after-axes-creation
             if new_rows != self.rows:  # reposition existing axes
-                new_cols = min(self.max_columns, ceil(self.__len__() / new_rows))
-                new_gs = GridSpec(new_rows, new_cols)
-                self.width = self.width * (new_cols / self.columns)
-                self.height = self.height * (new_rows / self.rows)
-                for index, ax in enumerate(self.fig.axes):
-                    new_sps = SubplotSpec(new_gs, index)
+                self.gridspec = GridSpec(new_rows, self.columns)
+                # self.width = self.width * (new_cols / self.columns)
+                # self.height = self.height * (new_rows / self.rows)
+                for index, ax in enumerate(self.parent.fig.axes):
+                    new_sps = SubplotSpec(self.gridspec, index)
                     ax.set_subplotspec(new_sps)
-                # above doesn't work for 
-                self.fig.tight_layout()
+                self.parent.fig.tight_layout()
 
         @property
         def shape(self) -> tuple[int, int]:
@@ -855,14 +843,14 @@ class DynamicFigure:
         @shape.setter
         def shape(self, new_shape: tuple[int, int]) -> None:
             """Set (rows, cols) of current subplot grid."""
-            if (not isinstance(new_shape, tuple) or
-                not all(isinstance(i, int) for i in new_shape)):
-                err_msg = (f"[{self.__class__.__name__}.shape] `shape` must be a "
-                        f"tuple of integers")
+            if not isinstance(new_shape, tuple):
+                err_msg = (f"[{self._error_trace()}] `shape` must be a length "
+                           f"2 tuple of integers (n_rows, n_columns)")
                 raise TypeError(err_msg)
-            if len(new_shape) != 2:
-                err_msg = (f"[{self.__class__.__name__}.shape] `shape` must be a "
-                        f"tuple of length 2 `(width, height)`")
+            if (len(new_shape) != 2 or
+                not all(isinstance(i, int) for i in new_shape)):
+                err_msg = (f"[{self._error_trace()}] `shape` must be a length "
+                          f"2 tuple of integers (n_rows, n_columns)")
                 raise ValueError(err_msg)
             rows, cols = new_shape
             self.rows = rows
@@ -958,5 +946,6 @@ if __name__ == "__main__":
     print(f"Title visible: {dfig.title.visible}")
     dfig.title.weight = "bold"
     print(f"Title weight: {dfig.title.weight}")
-    dfig.title = None
+    # dfig.title = None
     dfig.save(Path("CurveFit_test.png"))
+    print(dfig)

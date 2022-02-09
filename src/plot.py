@@ -402,7 +402,10 @@ class DynamicFigure:
         self._background = DynamicFigure.Background(self)
         self._border = DynamicFigure.Border(self)
         self._grid = DynamicFigure.SubplotGrid(self)
-        self._title = None
+        if self.fig._suptitle is not None:
+            self._title = DynamicText(self.fig._suptitle)
+        else:
+            self._title = None
 
     @property
     def background(self) -> DynamicFigure.Background:

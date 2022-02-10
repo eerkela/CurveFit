@@ -1,2 +1,6 @@
+src/*.pdf
 src/*.png
+src/*.svg
+test/*.pdf
 test/*.png
+test/*.svg

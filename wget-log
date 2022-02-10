@@ -1,0 +1,3 @@
+--2022-02-09 16:24:31--  https://update.code.visualstudio.com/commit:d6ee99e4c045a6716e5c653d7da8e9ae6f5a8b03/server-linux-x64/stable
+Resolving update.code.visualstudio.com (update.code.visualstudio.com)... failed: Name or service not known.
+wget: unable to resolve host address ‘update.code.visualstudio.com’

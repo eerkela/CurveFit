@@ -1,5 +1,4 @@
 from __future__ import annotations
-import inspect
 from math import ceil, sqrt
 from pathlib import Path
 from typing import Optional, Union
@@ -7,6 +6,10 @@ from typing import Optional, Union
 import matplotlib as mpl
 from matplotlib.gridspec import GridSpec, SubplotSpec
 import matplotlib.pyplot as plt
+
+"""
+TODO: Implement Sphinx documentation
+"""
 
 
 NUMERIC = Union[int, float]
@@ -39,8 +42,8 @@ class DynamicText:
     def __init__(self, text_obj: mpl.text.Text, **kwargs):
         if not isinstance(text_obj, mpl.text.Text):
             err_msg = (f"[DynamicText.__init__] `text_obj` must be an "
-                       f"instance of matplotlib.text.Text (received "
-                       f"{type(text_obj)})")
+                       f"instance of matplotlib.text.Text (received object of "
+                       f"type: {type(text_obj)})")
             raise TypeError(err_msg)
         self.obj = text_obj
         # matplotlib.text.Text apparently doesn't have a get_linespacing method
@@ -60,11 +63,12 @@ class DynamicText:
     def alpha(self, new_alpha: NUMERIC) -> None:
         if not isinstance(new_alpha, NUMERIC_TYPECHECK):
             err_msg = (f"[DynamicText.alpha] `alpha` must be a numeric "
-                       f"between 0 and 1")
+                       f"between 0 and 1 (received object of type: "
+                       f"{type(new_alpha)})")
             raise TypeError(err_msg)
         if not 0 <= new_alpha <= 1:
             err_msg = (f"[DynamicText.alpha] `alpha` must be a numeric "
-                       f"between 0 and 1 (received {new_alpha})")
+                       f"between 0 and 1 (received: {new_alpha})")
             raise ValueError(err_msg)
         self.obj.set_alpha(new_alpha)
 
@@ -75,7 +79,8 @@ class DynamicText:
     @autowrap.setter
     def autowrap(self, new_wrap: bool) -> None:
         if not isinstance(new_wrap, bool):
-            err_msg = f"[DynamicText.autowrap] `autowrap` must be a boolean"
+            err_msg = (f"[DynamicText.autowrap] `autowrap` must be a boolean "
+                       f"(received object of type: {type(new_wrap)})")
             raise TypeError(err_msg)
         self.obj.set_wrap(new_wrap)
         self.obj.get_figure().tight_layout()
@@ -90,18 +95,22 @@ class DynamicText:
         self, new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
     ) -> None:
         if not isinstance(new_color, (str, tuple)):
-            err_msg = (f"[DynamicText.color] `color` must be either a "
-                       f"string or tuple of numeric RGB values")
+            err_msg = (f"[DynamicText.color] `color` must be either a string "
+                       f"specifying a named color or a tuple of numeric RGB "
+                       f"values between 0 and 1 (received object of type: "
+                       f"{type(new_color)})")
             raise TypeError(err_msg)
         if isinstance(new_color, tuple):
             if (len(new_color) != 3 or
                 not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
                 not all(0 <= v <= 1 for v in new_color)):
                 err_msg = (f"[DynamicText.color] when passing RGB values, "
-                           f"`color` must be a tuple of length 3 containing "
-                           f"floats between 0 and 1 (received {new_color})")
+                           f"`color` must be a length 3 tuple containing "
+                           f"floats between 0 and 1 (received: {new_color})")
                 raise ValueError(err_msg)
-        self.obj.set_color(new_color)
+            self.obj.set_color(new_color + (self.alpha,))
+        else:
+            self.obj.set_color(new_color)
 
     @property
     def font(self) -> str:
@@ -114,13 +123,14 @@ class DynamicText:
             allowed_msg = "\n".join(sorted(allowed))
             err_msg = (f"[DynamicText.font] `font` must be a string "
                        f"referencing one of the available system fonts: "
-                       f"{allowed_msg}")
+                       f"{allowed_msg}\n(received object of type: "
+                       f"{type(new_font)})")
             raise TypeError(err_msg)
         if new_font not in allowed:
             allowed_msg = "\n".join(sorted(allowed))
             err_msg = (f"[DynamicText.font] `font` must be a string "
                        f"referencing one of the available system fonts: "
-                       f"{allowed_msg}")
+                       f"{allowed_msg}\n(received: '{new_font}')")
             raise ValueError(err_msg)
         self.obj.set_fontfamily(new_font)
         self.obj.get_figure().tight_layout()
@@ -136,12 +146,14 @@ class DynamicText:
         if not isinstance(new_horizontal_alignment, str):
             err_msg = (f"[DynamicText.horizontal_alignment] "
                        f"`horizontal_alignment` must be a string with one of "
-                       f"the following values: {allowed}")
+                       f"the following values: {allowed} (received object of "
+                       f"type: {type(new_horizontal_alignment)})")
             raise TypeError(err_msg)
         if new_horizontal_alignment not in allowed:
             err_msg = (f"[DynamicText.horizontal_alignment] "
                        f"`horizontal_alignment` must be a string with one of "
-                       f"the following values: {allowed}")
+                       f"the following values: {allowed} (received: "
+                       f"'{new_horizontal_alignment}')")
             raise ValueError(err_msg)
         self.obj.set_horizontalalignment(new_horizontal_alignment)
         self.obj.get_figure().tight_layout()
@@ -155,7 +167,8 @@ class DynamicText:
         if not isinstance(new_rotation, NUMERIC_TYPECHECK):
             err_msg = (f"[DynamicText.rotation] `rotation` must be a numeric "
                        f"representing the counterclockwise rotation angle in "
-                       f"degrees (0 = horizontal, 90 = vertical)")
+                       f"degrees (received object of type: "
+                       f"{type(new_rotation)})")
             raise TypeError(err_msg)
         self.obj.set_rotation(new_rotation)
         self.obj.get_figure().tight_layout()
@@ -168,11 +181,13 @@ class DynamicText:
     def line_spacing(self, new_line_spacing: NUMERIC) -> None:
         if not isinstance(new_line_spacing, NUMERIC_TYPECHECK):
             err_msg = (f"[DynamicText.line_spacing] `line_spacing` must be a "
-                       f"numeric >= 1 representing a multiple of `font_size`")
+                       f"numeric >= 1 representing a multiple of `font_size` "
+                       f"(received object of type: {type(new_line_spacing)})")
             raise TypeError(err_msg)
         if not new_line_spacing >= 1:
             err_msg = (f"[DynamicText.line_spacing] `line_spacing` must be a "
-                       f"numeric >= 1 representing a multiple of `font_size`")
+                       f"numeric >= 1 representing a multiple of `font_size` "
+                       f"(received: {new_line_spacing})")
             raise ValueError(err_msg)
         self._line_spacing = float(new_line_spacing)
         self.obj.set_linespacing(self._line_spacing)
@@ -185,15 +200,16 @@ class DynamicText:
     @position.setter
     def position(self, new_position: tuple[NUMERIC, NUMERIC]) -> None:
         if not isinstance(new_position, tuple):
-            err_msg = (f"[DynamicText.position] `position` must be an (x, y) "
-                       f"tuple of length 2 containing only numeric values "
-                       f"between 0 and 1")
+            err_msg = (f"[DynamicText.position] `position` must be an "
+                       f"`(x, y)` tuple of length 2 containing only numerics "
+                       f"between 0 and 1 (received object of type: "
+                       f"{type(new_position)})")
             raise TypeError(err_msg)
         if (len(new_position) != 2 or
             not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_position) or
             not all(0 <= v <= 1 for v in new_position)):
-            err_msg = (f"[DynamicText.position] `position` must be an (x, y) "
-                       f"tuple of length 2 containing only numeric values "
+            err_msg = (f"[DynamicText.position] `position` must be an "
+                       f"`(x, y)` tuple of length 2 containing only numerics "
                        f"between 0 and 1 (received: {new_position})")
             raise ValueError(err_msg)
         self.obj.set_position(new_position)
@@ -206,10 +222,12 @@ class DynamicText:
     @size.setter
     def size(self, new_size: NUMERIC) -> None:
         if not isinstance(new_size, NUMERIC_TYPECHECK):
-            err_msg = f"[DynamicText.size] `size` must be a numeric > 0"
+            err_msg = (f"[DynamicText.size] `size` must be a numeric > 0 "
+                       f"(received object of type: {type(new_size)})")
             raise TypeError(err_msg)
         if not new_size > 0:
-            err_msg = f"[DynamicText.size] `size` must be > 0"
+            err_msg = (f"[DynamicText.size] `size` must be a numeric > 0 "
+                       f"(received: {new_size})")
             raise ValueError(err_msg)
         self.obj.set_fontsize(new_size)
         self.obj.get_figure().tight_layout()
@@ -223,7 +241,8 @@ class DynamicText:
     def text(self, new_text: str) -> None:
         """Set figure title (not related to any subplot)."""
         if not isinstance(new_text, str):
-            err_msg = f"[DynamicText.text] `text` must be a string"
+            err_msg = (f"[DynamicText.text] `text` must be a string (received "
+                       f"object of type: {type(new_text)})")
             raise TypeError(err_msg)
         self.obj.set_text(new_text)
 
@@ -236,12 +255,14 @@ class DynamicText:
         allowed = {"center", "top", "bottom", "baseline", "center_baseline"}
         if not isinstance(new_vertical_alignment, str):
             err_msg = (f"[DynamicText.vertical_alignment] `vertical_alignment` "
-                       f"must be a string (allowed values: {allowed})")
+                       f"must be a string with one of the following values: "
+                       f"{allowed} (received object of type: "
+                       f"{type(new_vertical_alignment)})")
             raise TypeError(err_msg)
         if new_vertical_alignment not in allowed:
             err_msg = (f"[DynamicText.vertical_alignment] `vertical_alignment` "
-                       f"must be one of the following: {allowed} (received "
-                       f"'{new_vertical_alignment}')")
+                       f"must be a string with one of the following values: "
+                       f"{allowed} (received: '{new_vertical_alignment}')")
             raise ValueError(err_msg)
         self.obj.set_verticalalignment(new_vertical_alignment)
         self.obj.get_figure().tight_layout()
@@ -253,7 +274,8 @@ class DynamicText:
     @visible.setter
     def visible(self, new_visible: bool) -> None:
         if not isinstance(new_visible, bool):
-            err_msg = (f"[DynamicText.visible] `visible` must be a boolean")
+            err_msg = (f"[DynamicText.visible] `visible` must be a boolean "
+                       f"(received object of type: {type(new_visible)})")
             raise TypeError(err_msg)
         self.obj.set_visible(new_visible)
         self.obj.get_figure().tight_layout()
@@ -268,12 +290,14 @@ class DynamicText:
                    "roman", "semibold", "demibold", "demi", "bold", "heavy",
                    "extra bold", "black"}
         if not isinstance(new_weight, str):
-            err_msg = (f"[DynamicText.weight] `weight` must be a string "
-                       f"(allowed values: {allowed})")
+            err_msg = (f"[DynamicText.weight] `weight` must be a string with "
+                       f"one of the following values: {allowed} (received "
+                       f"object of type: {type(new_weight)}")
             raise TypeError(err_msg)
         if new_weight not in allowed:
-            err_msg = (f"[DynamicText.weight] `weight` must be one of the "
-                       f"following: {allowed} (received '{new_weight}')")
+            err_msg = (f"[DynamicText.weight] `weight` must be a string with "
+                       f"one of the following values: {allowed} (received: "
+                       f"'{new_weight}')")
             raise ValueError(err_msg)
         self.obj.set_fontweight(new_weight)
         self.obj.get_figure().tight_layout()
@@ -302,72 +326,275 @@ class DynamicText:
 
     def __repr__(self) -> str:
         props = [f"{k}={repr(v)}" for k, v in self.properties().items()]
-        return f"DynamicText({str(self.obj)}, {', '.join(props)})"
+        return f"DynamicText({repr(self.obj)}, {', '.join(props)})"
 
     def __str__(self) -> str:
         return self.text
 
 
-class DynamicAxes:
+class DynamicRectangle:
 
-    def __init__(self, axes: plt.Axes = None, **kwargs):
-        raise NotImplementedError()
+    def __init__(self, rect_obj: mpl.patches.Rectangle, **kwargs):
+        if not isinstance(rect_obj, mpl.patches.Rectangle):
+            err_msg = (f"[DynamicRectangle.__init__] `rect_obj` must be an "
+                       f"instance of matplotlib.patches.Rectangle (received "
+                       f"{type(rect_obj)} instead)")
+            raise TypeError(err_msg)
+        self.obj = rect_obj
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
-    def draw(self, type, position) -> None:
-        """Draw lines/polygons on the current axes."""
-        raise NotImplementedError()
+    @property
+    def anchor(self) -> tuple[float, float]:
+        return self.obj.get_xy()
 
-    class Background:
+    @anchor.setter
+    def anchor(self, new_anchor: tuple[NUMERIC, NUMERIC]) -> None:
+        if not isinstance(new_anchor, tuple):
+            err_msg = (f"[DynamicRectangle.anchor] `anchor` must be a length "
+                       f"2 tuple `(x, y)` of numerics (received object of "
+                       f"type: {type(new_anchor)})")
+            raise TypeError(err_msg)
+        # if  # value check
+        self.obj.set_xy(new_anchor)
 
-        def __init__(self, parent):
-            self.parent = parent
+    @property
+    def border_alpha(self) -> float:
+        return self.obj.get_edgecolor()[-1]
 
-        @property
-        def alpha(self) -> float:
-            raise NotImplementedError()
+    @border_alpha.setter
+    def border_alpha(self, new_alpha: NUMERIC) -> None:
+        if not isinstance(new_alpha, NUMERIC_TYPECHECK):
+            err_msg = (f"[DynamicRectangle.border_alpha] `border_alpha` must "
+                       f"be a numeric between 0 and 1 (received object of "
+                       f"type: {type(new_alpha)})")
+            raise TypeError(err_msg)
+        if not 0 <= new_alpha <= 1:
+            err_msg = (f"[DynamicRectangle.border_alpha] `border_alpha` must "
+                       f"be a numeric between 0 and 1 (received: {new_alpha})")
+            raise ValueError(err_msg)
+        self.obj.set_edgecolor(self.border_color + (new_alpha,))
 
-        @property
-        def color(self) -> tuple[float, float, float]:
-            raise NotImplementedError()
+    @property
+    def border_color(self) -> tuple[float, float, float]:
+        # matplotlib.colors.to_rgb converts named colors, drops alpha channel
+        return mpl.colors.to_rgb(self.obj.get_edgecolor())
 
-    class Legend:
+    @border_color.setter
+    def border_color(
+        self,
+        new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
+    ) -> None:
+        if not isinstance(new_color, (str, tuple)):
+            err_msg = (f"[DynamicRectangle.border_color] `border_color` must "
+                       f"be either a string specifying a named color or a "
+                       f"tuple of numeric RGB values between 0 and 1 "
+                       f"(received object of type: {type(new_color)})")
+            raise TypeError(err_msg)
+        if isinstance(new_color, tuple):
+            if (len(new_color) != 3 or
+                not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
+                not all(0 <= v <= 1 for v in new_color)):
+                err_msg = (f"[DynamicRectangle.border_color] `border_color` "
+                           f"must be either a string specifying a named color "
+                           f"or a tuple of numeric RGB values between 0 and 1 "
+                           f"(received: {new_color})")
+                raise ValueError(err_msg)
+            self.obj.set_edgecolor(new_color + (self.border_alpha,))
+        else:
+            self.obj.set_edgecolor(new_color)
 
-        def __init__(self, parent):
-            self.parent = parent
-            self.legend = self.parent.axes.get_legend()  # can be None
-            # Texts: self.legend.get_texts()
+    @property
+    def border_style(self) -> str:
+        return self.obj.get_linestyle()
 
-        @property
-        def visible(self) -> bool:
-            raise NotImplementedError()
+    @border_style.setter
+    def border_style(self, new_style: str) -> None:
+        # allowed values can be found at matplotlib.patches.Patch.set_linestyle
+        allowed = {"-", "solid", "--", "dashed", "-.", "dashdot", ":",
+                   "dotted", "none", "None", " ", ""}
+        if not isinstance(new_style, str):
+            err_msg = (f"[DynamicRectangle.border_style] `border_style` must "
+                       f"be a string with one of the following values: "
+                       f"{allowed} (received object of type: "
+                       f"{type(new_style)})")
+            raise TypeError(err_msg)
+        if new_style not in allowed:
+            err_msg = (f"[DynamicRectangle.border_style] `border_style` must "
+                       f"be a string with one of the following values: "
+                       f"{allowed} (received: {new_style})")
+            raise ValueError(err_msg)
+        self.obj.set_linestyle(new_style)
 
-    class XAxis:
+    @property
+    def border_width(self) -> float:
+        return self.obj.get_linewidth()
 
-        def __init__(self, parent):
-            self.parent = parent
+    @border_width.setter
+    def border_width(self, new_width: NUMERIC) -> None:
+        if not isinstance(new_width, NUMERIC_TYPECHECK):
+            err_msg = (f"[DynamicRectangle.border_width] `border_width` must "
+                       f"be a numeric value >= 0 (received object of type: "
+                       f"{type(new_width)})")
+            raise TypeError(err_msg)
+        if new_width < 0:
+            err_msg = (f"[DynamicRectangle.border_width] `border_width` must "
+                       f"be a numeric value >= 0 (received: {new_width})")
+            raise ValueError(err_msg)
+        self.obj.set_linewidth(new_width)
 
-        @property
-        def label(self) -> str:
-            raise NotImplementedError()
+    @property
+    def face_alpha(self) -> float:
+        return self.obj.get_facecolor()[-1]
 
-        @property
-        def limit(self) -> float:
-            raise NotImplementedError()
+    @face_alpha.setter
+    def face_alpha(self, new_alpha: NUMERIC) -> None:
+        if not isinstance(new_alpha, NUMERIC_TYPECHECK):
+            err_msg = (f"[DynamicRectangle.face_alpha] `face_alpha` must be a "
+                       f"numeric between 0 and 1 (received object of type: "
+                       f"{type(new_alpha)})")
+            raise TypeError(err_msg)
+        if not 0 <= new_alpha <= 1:
+            err_msg = (f"[DynamicRectangle.face_alpha] `face_alpha` must be a "
+                       f"numeric between 0 and 1 (received: {new_alpha})")
+            raise ValueError(err_msg)
+        self.obj.set_facecolor(self.face_color + (new_alpha,))
 
-    class YAxis:
+    @property
+    def face_color(self) -> tuple[float, float, float]:
+        # matplotlib.colors.to_rgb converts named colors, drops alpha channel
+        return mpl.colors.to_rgb(self.obj.get_facecolor())
 
-        def __init__(self, parent):
-            self.parent = parent
-            self.parent_class = self.parent.__class__.__name__
-            self.self_class = self.__class__.__name__
+    @face_color.setter
+    def face_color(
+        self,
+        new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
+    ) -> None:
+        if not isinstance(new_color, (str, tuple)):
+            err_msg = (f"[DynamicRectangle.face_color] `face_color` must be "
+                       f"either a string specifying a named color or a tuple "
+                       f"of numeric RGB values between 0 and 1 (received "
+                       f"object of type: {type(new_color)})")
+            raise TypeError(err_msg)
+        if isinstance(new_color, tuple):
+            if (len(new_color) != 3 or
+                not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
+                not all(0 <= v <= 1 for v in new_color)):
+                err_msg = (f"[DynamicRectangle.face_color] `face_color` must "
+                           f"be either a string specifying a named color or a "
+                           f"tuple of numeric RGB values between 0 and 1 "
+                           f"(received: {new_color})")
+                raise ValueError(err_msg)
+            self.obj.set_facecolor(new_color + (self.face_alpha,))
+        else:
+            self.obj.set_facecolor(new_color)
 
-        @property
-        def label(self) -> str:
-            raise NotImplementedError()
+    @property
+    def hatch(self) -> str:
+        return self.obj.get_hatch()
 
-        @property
-        def limit(self) -> float:
-            raise NotImplementedError()
+    @hatch.setter
+    def hatch(self, new_hatch: str) -> None:
+        """
+        hatch values (from matplotlib.patches.Rectangle.set_hatch):
+            /    - diagonal hatching
+            \\   - back diagonal
+            -    - horizontal
+            +    - crossed
+            x    - crossed diagonal
+            o    - small circle
+            O    - large circle
+            .    - dots
+            *    - stars
+
+        Letters can be combined to mix styles.  Repeating the same symbol
+        increases its density.
+
+        Only supported in the PostScript, PDF, SVG, and Agg backends.
+        """
+        allowed = {"/", "\\", "|", "-", "+", "x", "o", "O", ".", "*"}
+        if not isinstance(new_hatch, str):
+            err_msg = (f"[DynamicRectangle.hatch] `hatch` must be a string "
+                       f"with one or more of the following values: {allowed} "
+                       f"(received object of type: {type(new_hatch)})")
+            raise TypeError(err_msg)
+        if not all(v in allowed for v in new_hatch):
+            err_msg = (f"[DynamicRectangle.hatch] `hatch` must be a string "
+                       f"with one or more of the following values: {allowed} "
+                       f"(received: {new_hatch})")
+            raise ValueError(err_msg)
+        self.obj.set_hatch(new_hatch)
+
+    @property
+    def height(self) -> float:
+        return self.obj.get_height()
+
+    @height.setter
+    def height(self, new_height: NUMERIC) -> None:
+        if not isinstance(new_height, NUMERIC_TYPECHECK):
+            err_msg = (f"[DynamicRectangle.height] `height` must be a numeric "
+                       f"!= 0 (received object of type: {type(new_height)})")
+            raise TypeError(err_msg)
+        if new_height == 0:
+            err_msg = (f"[DynamicRectangle.height] `height` must be a numeric "
+                       f"!= 0 (received: {new_height})")
+            raise ValueError(err_msg)
+        self.obj.set_height(new_height)
+
+    @property
+    def rotation(self) -> float:
+        return self.obj.get_angle()
+
+    @rotation.setter
+    def rotation(self, new_rotation: NUMERIC) -> None:
+        if not isinstance(new_rotation, NUMERIC_TYPECHECK):
+            err_msg = (f"[DynamicRectangle.rotation] `rotation` must be a "
+                       f"numeric (received object of type: "
+                       f"{type(new_rotation)})")
+            raise TypeError(err_msg)
+        self.obj.set_angle(new_rotation)
+
+    @property
+    def width(self) -> float:
+        return self.obj.get_width()
+
+    @width.setter
+    def width(self, new_width: NUMERIC) -> None:
+        if not isinstance(new_width, NUMERIC_TYPECHECK):
+            err_msg = (f"[DynamicRectangle.width] `width` must be a numeric "
+                       f"!= 0 (received object of type: {type(new_width)})")
+            raise TypeError(err_msg)
+        if new_width == 0:
+            err_msg = (f"[DynamicRectangle.width] `width` must be a numeric "
+                       f"!= 0 (received: {new_width})")
+            raise ValueError(err_msg)
+        self.obj.set_width(new_width)
+
+    def properties(
+        self
+    ) -> dict[str, Union[str, NUMERIC, bool, tuple[NUMERIC, ...]]]:
+        prop_dict = {
+            "anchor": self.anchor,
+            "border_alpha": self.border_alpha,
+            "border_color": self.border_color,
+            "border_style": self.border_style,
+            "border_width": self.border_width,
+            "face_alpha": self.face_alpha,
+            "face_color": self.face_color,
+            "hatch": self.hatch,
+            "height": self.height,
+            "rotation": self.rotation,
+            "width": self.width
+        }
+        return prop_dict
+
+    def __repr__(self) -> str:
+        props = [f"{k}={repr(v)}" for k, v in self.properties().items()]
+        return f"DynamicRectangle({repr(self.obj)}, {', '.join(props)})"
+
+    def __str__(self) -> str:
+        return (f"DynamicRectangle: {self.anchor} + ({self.width}, "
+                f"{self.height}), RGB color: {self.face_color}")
 
 
 class DynamicFigure:
@@ -383,6 +610,7 @@ class DynamicFigure:
     def __init__(self,
                  label: str,
                  figure: plt.Figure = None,
+                 background: bool = True,
                  **kwargs):
         if label in self.observed_labels:
             err_msg = (f"[DynamicFigure.__init__] `label` must be unique "
@@ -399,9 +627,11 @@ class DynamicFigure:
         self.fig.tight_layout()
         for k, v in kwargs.items():
             self.__setattr__(k, v)
-        self._background = DynamicFigure.Background(self)
-        self._border = DynamicFigure.Border(self)
+
+        # set up dynamic elements
         self._grid = DynamicFigure.SubplotGrid(self)
+        self._background = None  # initialize
+        self.background = background
         if self.fig._suptitle is not None:
             self._title = DynamicText(self.fig._suptitle)
         else:
@@ -410,17 +640,38 @@ class DynamicFigure:
     @property
     def background(self) -> DynamicFigure.Background:
         """Read-only accessor for self._background."""
+        # background rectangle is always the first element of get_children()
         return self._background
 
-    @property
-    def border(self) -> DynamicFigure.Border:
-        """Read-only accessor for self._border."""
-        return self._border
+    @background.setter
+    def background(self, has_background: Optional[bool]) -> None:
+        if not isinstance(has_background, (bool, type(None))):
+            err_msg = (f"[DynamicFigure.background] `background` must be set "
+                       f"to a boolean or None, with False/None deleting the "
+                       f"current background rectangle (received object of "
+                       f"type: {type(has_background)})")
+            raise TypeError(err_msg)
+        children = self.fig.get_children()
+        if (len(children) == 0 or
+            not isinstance(children[0], mpl.patches.Rectangle)):
+            children_msg = "\n".join(children)
+            err_msg = (f"[DynamicFigure.background] unexpected error, figure "
+                       f"has no background rectangle: expected first index of "
+                       f"figure.get_children() to be an instance of "
+                       f"matplotlib.patches.Rectangle (observed children: "
+                       f"{children_msg})")
+            raise RuntimeError(err_msg)
+        if has_background:
+            self._background = DynamicFigure.Background(children[0], self)
+            self._background.visible = True
+        else:
+            self._background.visible = False
+            self._background = None
 
-    @property
-    def contents(self) -> list[DynamicAxes]:
-        """Return the subplot contents of this figure."""
-        return [DynamicAxes(ax) for ax in self.fig.axes]
+    # @property
+    # def contents(self) -> list[DynamicAxes]:
+    #     """Return the subplot contents of this figure."""
+    #     return [DynamicAxes(ax) for ax in self.fig.axes]
 
     @property
     def dpi(self) -> float:
@@ -520,13 +771,13 @@ class DynamicFigure:
         self.set_active()
         plt.show()
 
-    def __add__(self, axes: Union[plt.Axes, DynamicAxes]) -> DynamicFigure:
-        """Add an axis to this figure as a new subplot."""
-        raise NotImplementedError()
+    # def __add__(self, axes: Union[plt.Axes, DynamicAxes]) -> DynamicFigure:
+    #     """Add an axis to this figure as a new subplot."""
+    #     raise NotImplementedError()
 
-    def __iadd__(self, axes: DynamicAxes) -> DynamicFigure:
-        """Add an axis to this figure as a new subplot (in-place)."""
-        raise NotImplementedError()
+    # def __iadd__(self, axes: DynamicAxes) -> DynamicFigure:
+    #     """Add an axis to this figure as a new subplot (in-place)."""
+    #     raise NotImplementedError()
 
     def __len__(self) -> int:
         """Returns total number of axes/subplots contained in this figure."""
@@ -540,139 +791,72 @@ class DynamicFigure:
         return (f"{self.label} ({self.subplot_grid.rows}x"
                 f"{self.subplot_grid.columns}, {self.__len__()} subplot)")
 
-    def __sub__(self, axes: DynamicAxes) -> DynamicFigure:
-        """Remove an axis/subplot from this figure."""
-        raise NotImplementedError()
+    # def __sub__(self, axes: DynamicAxes) -> DynamicFigure:
+    #     """Remove an axis/subplot from this figure."""
+    #     raise NotImplementedError()
 
-    def __isub__(self, axes: DynamicAxes) -> DynamicFigure:
-        """Remove an axis/subplot from this figure (in-place)."""
-        raise NotImplementedError()
+    # def __isub__(self, axes: DynamicAxes) -> DynamicFigure:
+    #     """Remove an axis/subplot from this figure (in-place)."""
+    #     raise NotImplementedError()
 
-    class Background:
+    class Background(DynamicRectangle):
 
-        def __init__(self, parent: DynamicFigure):
+        def __init__(self,
+                     rect_obj: mpl.patches.Rectangle,
+                     parent: DynamicFigure,
+                     **kwargs):
+            super().__init__(rect_obj, **kwargs)
             self.parent = parent
-            self.parent_class = self.parent.__class__.__name__
-            self.self_class = self.__class__.__name__
 
         @property
-        def alpha(self) -> float:
-            return self.parent.fig.get_facecolor()[-1]
+        def face_color(self) -> tuple[float, float, float]:
+            # matplotlib.colors.to_rgb converts named colors, drops alpha channel
+            return mpl.colors.to_rgb(self.obj.get_facecolor())
 
-        @alpha.setter
-        def alpha(self, new_alpha: float) -> None:
-            if not isinstance(new_alpha, float):
-                err_msg = (f"[{self.parent_class}.{self.self_class}.alpha] "
-                           f"`alpha` must be a float")
-                raise TypeError(err_msg)
-            if not 0 <= new_alpha <= 1:
-                err_msg = (f"[{self.parent_class}.{self.self_class}.alpha] "
-                           f"`alpha` must be between 0 and 1 (received "
-                           f"{new_alpha})")
-                raise ValueError(err_msg)
-            self.parent.fig.set_facecolor(self.color + (new_alpha,))
-
-        @property
-        def color(self) -> tuple[float, float, float]:
-            """Return RGB color values of this figure's background rectangle."""
-            return mpl.colors.to_rgb(self.parent.fig.get_facecolor())
-
-        @color.setter
-        def color(
+        @face_color.setter
+        def face_color(
             self,
             new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
         ) -> None:
-            """Set the color of the background rectangle for the current figure."""
-            if not any(isinstance(new_color, t) for t in [str, tuple]):
-                err_msg = (f"[{self.parent_class}.{self.self_class}.color] "
-                           f"`color` must be either a string or tuple of "
-                           f"numeric RGB values")
+            if not isinstance(new_color, (str, tuple)):
+                err_msg = (f"[DynamicFigure.Background.face_color] "
+                           f"`face_color` must be either a string specifying "
+                           f"a named color or a tuple of numeric RGB values "
+                           f"between 0 and 1 (received object of type: "
+                           f"{type(new_color)})")
                 raise TypeError(err_msg)
-            if isinstance(new_color, tuple):
-                if (len(new_color) != 3 or
-                    not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
-                    not all(0 <= v <= 1 for v in new_color)):
-                    err_msg = (f"[{self.parent_class}.{self.self_class}.color] "
-                               f"when passing RGB values, `color` must be a "
-                               f"tuple of length 3 containing floats between "
-                               f"0 and 1 (received {new_color})")
-                    raise ValueError(err_msg)
+            if (isinstance(new_color, tuple) and
+                (len(new_color) != 3 or
+                not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
+                not all(0 <= v <= 1 for v in new_color))):
+                err_msg = (f"[DynamicFigure.Background.face_color] "
+                           f"`face_color` must be either a string specifying "
+                           f"a named color or a tuple of numeric RGB values "
+                           f"between 0 and 1 (received: {new_color})")
+                raise ValueError(err_msg)
             if isinstance(new_color, str):
-                self.parent.fig.set_facecolor(new_color)
+                self.obj.set_facecolor(new_color)
             else:
-                self.parent.fig.set_facecolor(new_color + (self.alpha,))
-            cdiff = color_diff(self.color, self.parent.title.color)
+                self.obj.set_facecolor(new_color + (self.face_alpha,))
+            cdiff = color_diff(self.face_color, self.parent.title.color)
             if cdiff < self.parent.color_cutoff:
                 self.parent.title.invert_color()
 
-    class Border:
-
-        def __init__(self, parent: DynamicFigure):
-            self.parent = parent
-            self.parent_class = self.parent.__class__.__name__
-            self.self_class = self.__class__.__name__
-
         @property
-        def alpha(self) -> float:
-            return self.parent.fig.get_edgecolor()[-1]
+        def height(self) -> float:
+            return self.parent.height
 
-        @alpha.setter
-        def alpha(self, new_alpha: float):
-            if not isinstance(new_alpha, float):
-                err_msg = (f"[{self.parent_class}.{self.self_class}.alpha] "
-                           f"`alpha` must be a float")
-                raise TypeError(err_msg)
-            if not 0 <= new_alpha <= 1:
-                err_msg = (f"[{self.parent_class}.{self.self_class}.alpha] "
-                           f"`alpha` must be between 0 and 1 (received "
-                           f"{new_alpha})")
-                raise ValueError(err_msg)
-            self.parent.fig.set_edgecolor(self.color + (new_alpha,))
-
-        @property
-        def color(self) -> tuple[float, float, float]:
-            """Return RGB color values of border line around current figure."""
-            return mpl.colors.to_rgb(self.parent.fig.get_edgecolor())
-
-        @color.setter
-        def color(
-            self,
-            new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
-        ) -> None:
-            """Set color of border line around the current figure."""
-            if not any(isinstance(new_color, t) for t in [str, tuple]):
-                err_msg = (f"[{self.parent_class}.{self.self_class}.color] "
-                           f"`color` must be either a string or tuple of "
-                           f"numeric RGB values")
-                raise TypeError(err_msg)
-            if isinstance(new_color, tuple):
-                if (len(new_color) != 3 or
-                    not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
-                    not all(0 <= v <= 1 for v in new_color)):
-                    err_msg = (f"[{self.parent_class}.{self.self_class}.color] "
-                               f"when passing RGB values, `color` must be a "
-                               f"tuple of length 3 containing floats between "
-                               f"0 and 1 (received {new_color})")
-                    raise ValueError(err_msg)
-            self.parent.fig.set_edgecolor(new_color + (self.alpha,))
+        @height.setter
+        def height(self, new_height: NUMERIC) -> None:
+            self.parent.height = new_height
 
         @property
         def width(self) -> float:
-            """Return width (in points) of border line around the current figure."""
-            return self.parent.fig.get_linewidth()
+            return self.parent.width
 
         @width.setter
-        def width(self, new_width: float) -> None:
-            """Set width (in points) of border line around the current figure."""
-            if not isinstance(new_width, float):
-                err_msg = (f"[{self.__class__.__name__}.border.width] "
-                           f"`width` must be a float")
-                raise TypeError(err_msg)
-            if new_width < 0:
-                err_msg = (f"[{self.__class__.__name__}.border.width] "
-                           f"`width` must be >= 0")
-                raise ValueError(err_msg)
-            self.parent.fig.set_linewidth(new_width)
+        def width(self, new_width: NUMERIC) -> None:
+            self.parent.width = new_width
 
     class SubplotGrid:
 
@@ -806,7 +990,7 @@ if __name__ == "__main__":
     print(f"Title alpha: {dfig.title.alpha}")
     dfig.title.autowrap = True
     print(f"Title autowrap: {dfig.title.autowrap}")
-    dfig.background.color = (0.2, 0.2, 0.2)
+    dfig.background.face_color = (0.2, 0.2, 0.2)
     print(f"Title color: {dfig.title.color}")
     dfig.title.font = "Liberation Serif"
     print(f"Title font: {dfig.title.font}")
@@ -826,8 +1010,22 @@ if __name__ == "__main__":
     print(f"Title visible: {dfig.title.visible}")
     dfig.title.weight = "bold"
     print(f"Title weight: {dfig.title.weight}")
-    # dfig.title = None
-    # dfig.title = "test2"
-    dfig.save(Path("CurveFit_test.png"))
     print(repr(dfig.title))
+    print()
+    print(f"Background color: {dfig.background.face_color}")
+    dfig.background.face_alpha = 0.5
+    print(f"Background alpha: {dfig.background.face_alpha}")
+    dfig.background.hatch = "O"
+    print(f"Background hatch style: {dfig.background.hatch}")
+    dfig.background.border_width = 10
+    print(f"Background border width: {dfig.background.border_width}")
+    dfig.background.border_color = "red"
+    print(f"Background border color: {dfig.background.border_color}")
+    dfig.background.border_alpha = 1.0
+    print(f"Background border alpha: {dfig.background.border_alpha}")
+    dfig.background.border_style = "--"
+    print(f"Background border style: {dfig.background.border_style}")
+    print(repr(dfig.background))
+
+    dfig.save(Path("CurveFit_test.pdf"))
     print(dfig)

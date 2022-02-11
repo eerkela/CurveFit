@@ -7,13 +7,14 @@ import matplotlib as mpl
 from matplotlib.gridspec import GridSpec, SubplotSpec
 import matplotlib.pyplot as plt
 
-from . import NUMERIC, NUMERIC_TYPECHECK
+from . import NUMERIC, NUMERIC_TYPECHECK, error_trace
 from .color import color_diff
 from .shape import DynamicRectangle
 from .text import DynamicText
 
 """
 TODO: Implement Sphinx documentation
+TODO: Update DynamicFigure.Background in light of changes to DynamicRectangle
 """
 
 
@@ -46,16 +47,27 @@ class DynamicFigure:
         self.fig.set_label(self.label)
         self.fig.tight_layout()
         for k, v in kwargs.items():
-            self.__setattr__(k, v)
+            setattr(self, k, v)
 
         # set up dynamic elements
         self._grid = DynamicFigure.SubplotGrid(self)
-        self._background = None  # initialize
-        self.background = background
-        if self.fig._suptitle is not None:
+        children = self.fig.get_children()
+        if (len(children) == 0 or
+            not isinstance(children[0], mpl.patches.Rectangle)):
+            children_msg = "\n".join(children)
+            err_msg = (f"[DynamicFigure.background] unexpected error, figure "
+                       f"has no background rectangle: expected first index of "
+                       f"figure.get_children() to be an instance of "
+                       f"matplotlib.patches.Rectangle (observed children: "
+                       f"{children_msg})")
+            raise RuntimeError(err_msg)
+        self._background = DynamicFigure.Background(children[0], self)
+        if self.fig._suptitle is None:
+            self.fig.suptitle("")
             self._title = DynamicText(self.fig._suptitle)
+            self._title.visible = False
         else:
-            self._title = None
+            self._title = DynamicText(self.fig._suptitle)
 
     @property
     def background(self) -> DynamicFigure.Background:
@@ -71,22 +83,7 @@ class DynamicFigure:
                        f"current background rectangle (received object of "
                        f"type: {type(has_background)})")
             raise TypeError(err_msg)
-        children = self.fig.get_children()
-        if (len(children) == 0 or
-            not isinstance(children[0], mpl.patches.Rectangle)):
-            children_msg = "\n".join(children)
-            err_msg = (f"[DynamicFigure.background] unexpected error, figure "
-                       f"has no background rectangle: expected first index of "
-                       f"figure.get_children() to be an instance of "
-                       f"matplotlib.patches.Rectangle (observed children: "
-                       f"{children_msg})")
-            raise RuntimeError(err_msg)
-        if has_background:
-            self._background = DynamicFigure.Background(children[0], self)
-            self._background.visible = True
-        else:
-            self._background.visible = False
-            self._background = None
+        self._background.visible = has_background
 
     # @property
     # def contents(self) -> list[DynamicAxes]:
@@ -142,15 +139,11 @@ class DynamicFigure:
                        f"string or None (received {type(new_title)})")
             raise TypeError(err_msg)
         if not new_title:  # title is None or empty string
-            self._title = None
-            self.fig._suptitle = None
+            self._title.text = ""
+            self._title.visible = False
         else:
-            if self._title is not None:
-                kwargs = self._title.properties()
-                kwargs.pop("text")
-            else:
-                kwargs = {}
-            self._title = DynamicText(self.fig.suptitle(new_title), **kwargs)
+            self._title.text = new_title
+            self._title.visible = True
         self.fig.tight_layout()
 
     @property

@@ -3,11 +3,12 @@ from typing import Union
 
 import matplotlib as mpl
 
-from . import NUMERIC, NUMERIC_TYPECHECK
+from . import NUMERIC, NUMERIC_TYPECHECK, error_trace
 
 
 """
 TODO: Implement Sphinx documentation
+TODO: if not visible, have getters return None
 """
 
 

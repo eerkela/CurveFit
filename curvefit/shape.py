@@ -3,7 +3,7 @@ from typing import Union
 
 import matplotlib as mpl
 
-from . import NUMERIC, NUMERIC_TYPECHECK
+from . import NUMERIC, NUMERIC_TYPECHECK, error_trace
 
 
 """
@@ -11,31 +11,17 @@ TODO: Implement Sphinx documentation
 """
 
 
-class DynamicRectangle:
+class DynamicPatch:
 
-    def __init__(self, rect_obj: mpl.patches.Rectangle, **kwargs):
-        if not isinstance(rect_obj, mpl.patches.Rectangle):
-            err_msg = (f"[DynamicRectangle.__init__] `rect_obj` must be an "
-                       f"instance of matplotlib.patches.Rectangle (received "
-                       f"{type(rect_obj)} instead)")
+    def __init__(self, patch_obj: mpl.patches.Patch, **kwargs):
+        if not issubclass(type(patch_obj), mpl.patches.Patch):
+            err_msg = (f"[{error_trace(self)}] `patch_obj` must be an "
+                       f"instance/subclass of matplotlib.patches.Patch "
+                       f"(received  object of type: {type(patch_obj)})")
             raise TypeError(err_msg)
-        self.obj = rect_obj
+        self.obj = patch_obj
         for k, v in kwargs.items():
             setattr(self, k, v)
-
-    @property
-    def anchor(self) -> tuple[float, float]:
-        return self.obj.get_xy()
-
-    @anchor.setter
-    def anchor(self, new_anchor: tuple[NUMERIC, NUMERIC]) -> None:
-        if not isinstance(new_anchor, tuple):
-            err_msg = (f"[DynamicRectangle.anchor] `anchor` must be a length "
-                       f"2 tuple `(x, y)` of numerics (received object of "
-                       f"type: {type(new_anchor)})")
-            raise TypeError(err_msg)
-        # if  # value check
-        self.obj.set_xy(new_anchor)
 
     @property
     def border_alpha(self) -> float:
@@ -44,13 +30,13 @@ class DynamicRectangle:
     @border_alpha.setter
     def border_alpha(self, new_alpha: NUMERIC) -> None:
         if not isinstance(new_alpha, NUMERIC_TYPECHECK):
-            err_msg = (f"[DynamicRectangle.border_alpha] `border_alpha` must "
-                       f"be a numeric between 0 and 1 (received object of "
-                       f"type: {type(new_alpha)})")
+            err_msg = (f"[{error_trace(self)}] `border_alpha` must be a "
+                       f"numeric between 0 and 1 (received object of type: "
+                       f"{type(new_alpha)})")
             raise TypeError(err_msg)
         if not 0 <= new_alpha <= 1:
-            err_msg = (f"[DynamicRectangle.border_alpha] `border_alpha` must "
-                       f"be a numeric between 0 and 1 (received: {new_alpha})")
+            err_msg = (f"[{error_trace(self)}] `border_alpha` must be a "
+                       f"numeric between 0 and 1 (received: {new_alpha})")
             raise ValueError(err_msg)
         self.obj.set_edgecolor(self.border_color + (new_alpha,))
 
@@ -65,18 +51,18 @@ class DynamicRectangle:
         new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
     ) -> None:
         if not isinstance(new_color, (str, tuple)):
-            err_msg = (f"[DynamicRectangle.border_color] `border_color` must "
-                       f"be either a string specifying a named color or a "
-                       f"tuple of numeric RGB values between 0 and 1 "
-                       f"(received object of type: {type(new_color)})")
+            err_msg = (f"[{error_trace(self)}] `border_color` must be either "
+                       f"a string specifying a named color or a tuple of "
+                       f"numeric RGB values between 0 and 1 (received "
+                       f"object of type: {type(new_color)})")
             raise TypeError(err_msg)
         if isinstance(new_color, tuple):
             if (len(new_color) != 3 or
                 not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
                 not all(0 <= v <= 1 for v in new_color)):
-                err_msg = (f"[DynamicRectangle.border_color] `border_color` "
-                           f"must be either a string specifying a named color "
-                           f"or a tuple of numeric RGB values between 0 and 1 "
+                err_msg = (f"[{error_trace(self)}] `border_color` must be "
+                           f"either a string specifying a named color or a "
+                           f"tuple of numeric RGB values between 0 and 1 "
                            f"(received: {new_color})")
                 raise ValueError(err_msg)
             self.obj.set_edgecolor(new_color + (self.border_alpha,))
@@ -93,15 +79,14 @@ class DynamicRectangle:
         allowed = {"-", "solid", "--", "dashed", "-.", "dashdot", ":",
                    "dotted", "none", "None", " ", ""}
         if not isinstance(new_style, str):
-            err_msg = (f"[DynamicRectangle.border_style] `border_style` must "
-                       f"be a string with one of the following values: "
-                       f"{allowed} (received object of type: "
-                       f"{type(new_style)})")
+            err_msg = (f"[{error_trace(self)}] `border_style` must be a "
+                       f"string with one of the following values: {allowed} "
+                       f"(received object of type: {type(new_style)})")
             raise TypeError(err_msg)
         if new_style not in allowed:
-            err_msg = (f"[DynamicRectangle.border_style] `border_style` must "
-                       f"be a string with one of the following values: "
-                       f"{allowed} (received: {new_style})")
+            err_msg = (f"[{error_trace(self)}] `border_style` must be a "
+                       f"string with one of the following values: {allowed} "
+                       f"(received: {new_style})")
             raise ValueError(err_msg)
         self.obj.set_linestyle(new_style)
 
@@ -112,13 +97,13 @@ class DynamicRectangle:
     @border_width.setter
     def border_width(self, new_width: NUMERIC) -> None:
         if not isinstance(new_width, NUMERIC_TYPECHECK):
-            err_msg = (f"[DynamicRectangle.border_width] `border_width` must "
-                       f"be a numeric value >= 0 (received object of type: "
+            err_msg = (f"[{error_trace(self)}] `border_width` must be a "
+                       f"numeric value >= 0 (received object of type: "
                        f"{type(new_width)})")
             raise TypeError(err_msg)
         if new_width < 0:
-            err_msg = (f"[DynamicRectangle.border_width] `border_width` must "
-                       f"be a numeric value >= 0 (received: {new_width})")
+            err_msg = (f"[{error_trace(self)}] `border_width` must be a "
+                       f"numeric value >= 0 (received: {new_width})")
             raise ValueError(err_msg)
         self.obj.set_linewidth(new_width)
 
@@ -129,13 +114,13 @@ class DynamicRectangle:
     @face_alpha.setter
     def face_alpha(self, new_alpha: NUMERIC) -> None:
         if not isinstance(new_alpha, NUMERIC_TYPECHECK):
-            err_msg = (f"[DynamicRectangle.face_alpha] `face_alpha` must be a "
-                       f"numeric between 0 and 1 (received object of type: "
+            err_msg = (f"[{error_trace(self)}] `face_alpha` must be a numeric "
+                       f"between 0 and 1 (received object of type: "
                        f"{type(new_alpha)})")
             raise TypeError(err_msg)
         if not 0 <= new_alpha <= 1:
-            err_msg = (f"[DynamicRectangle.face_alpha] `face_alpha` must be a "
-                       f"numeric between 0 and 1 (received: {new_alpha})")
+            err_msg = (f"[{error_trace(self)}] `face_alpha` must be a numeric "
+                       f"between 0 and 1 (received: {new_alpha})")
             raise ValueError(err_msg)
         self.obj.set_facecolor(self.face_color + (new_alpha,))
 
@@ -150,17 +135,17 @@ class DynamicRectangle:
         new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
     ) -> None:
         if not isinstance(new_color, (str, tuple)):
-            err_msg = (f"[DynamicRectangle.face_color] `face_color` must be "
-                       f"either a string specifying a named color or a tuple "
-                       f"of numeric RGB values between 0 and 1 (received "
-                       f"object of type: {type(new_color)})")
+            err_msg = (f"[{error_trace(self)}] `face_color` must be either a "
+                       f"string specifying a named color or a tuple of "
+                       f"numeric RGB values between 0 and 1 (received object "
+                       f"of type: {type(new_color)})")
             raise TypeError(err_msg)
         if isinstance(new_color, tuple):
             if (len(new_color) != 3 or
                 not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
                 not all(0 <= v <= 1 for v in new_color)):
-                err_msg = (f"[DynamicRectangle.face_color] `face_color` must "
-                           f"be either a string specifying a named color or a "
+                err_msg = (f"[{error_trace(self)}] `face_color` must be "
+                           f"either  a string specifying a named color or a "
                            f"tuple of numeric RGB values between 0 and 1 "
                            f"(received: {new_color})")
                 raise ValueError(err_msg)
@@ -193,16 +178,53 @@ class DynamicRectangle:
         """
         allowed = {"/", "\\", "|", "-", "+", "x", "o", "O", ".", "*"}
         if not isinstance(new_hatch, str):
-            err_msg = (f"[DynamicRectangle.hatch] `hatch` must be a string "
-                       f"with one or more of the following values: {allowed} "
+            err_msg = (f"[{error_trace(self)}] `hatch` must be a string with "
+                       f"one or more of the following values: {allowed} "
                        f"(received object of type: {type(new_hatch)})")
             raise TypeError(err_msg)
         if not all(v in allowed for v in new_hatch):
-            err_msg = (f"[DynamicRectangle.hatch] `hatch` must be a string "
-                       f"with one or more of the following values: {allowed} "
+            err_msg = (f"[{error_trace(self)}] `hatch` must be a string with "
+                       f"one or more of the following values: {allowed} "
                        f"(received: {new_hatch})")
             raise ValueError(err_msg)
         self.obj.set_hatch(new_hatch)
+
+    @property
+    def visible(self) -> bool:
+        return self.obj.get_visible()
+
+    @visible.setter
+    def visible(self, new_visible: bool) -> None:
+        if not isinstance(new_visible, bool):
+            err_msg = (f"[{error_trace(self)}] `visible` must be a boolean "
+                       f"(received object of type: {type(new_visible)})")
+            raise TypeError(err_msg)
+        self.obj.set_visible(new_visible)
+
+
+class DynamicRectangle(DynamicPatch):
+
+    def __init__(self, rect_obj: mpl.patches.Rectangle, **kwargs):
+        if not isinstance(rect_obj, mpl.patches.Rectangle):
+            err_msg = (f"[{error_trace(self)}] `rect_obj` must be an instance "
+                       f"of matplotlib.patches.Rectangle (received object of "
+                       f"type: {type(rect_obj)})")
+            raise TypeError(err_msg)
+        super().__init__(rect_obj, **kwargs)
+
+    @property
+    def anchor(self) -> tuple[float, float]:
+        return self.obj.get_xy()
+
+    @anchor.setter
+    def anchor(self, new_anchor: tuple[NUMERIC, NUMERIC]) -> None:
+        if not isinstance(new_anchor, tuple):
+            err_msg = (f"[{error_trace(self)}] `anchor` must be a length 2 "
+                       f"tuple `(x, y)` of numerics (received object of type: "
+                       f"{type(new_anchor)})")
+            raise TypeError(err_msg)
+        # if  # value check
+        self.obj.set_xy(new_anchor)
 
     @property
     def height(self) -> float:
@@ -211,11 +233,11 @@ class DynamicRectangle:
     @height.setter
     def height(self, new_height: NUMERIC) -> None:
         if not isinstance(new_height, NUMERIC_TYPECHECK):
-            err_msg = (f"[DynamicRectangle.height] `height` must be a numeric "
+            err_msg = (f"[{error_trace(self)}] `height` must be a numeric "
                        f"!= 0 (received object of type: {type(new_height)})")
             raise TypeError(err_msg)
         if new_height == 0:
-            err_msg = (f"[DynamicRectangle.height] `height` must be a numeric "
+            err_msg = (f"[{error_trace(self)}] `height` must be a numeric "
                        f"!= 0 (received: {new_height})")
             raise ValueError(err_msg)
         self.obj.set_height(new_height)
@@ -227,9 +249,8 @@ class DynamicRectangle:
     @rotation.setter
     def rotation(self, new_rotation: NUMERIC) -> None:
         if not isinstance(new_rotation, NUMERIC_TYPECHECK):
-            err_msg = (f"[DynamicRectangle.rotation] `rotation` must be a "
-                       f"numeric (received object of type: "
-                       f"{type(new_rotation)})")
+            err_msg = (f"[{error_trace(self)}] `rotation` must be a numeric "
+                       f"(received object of type: {type(new_rotation)})")
             raise TypeError(err_msg)
         self.obj.set_angle(new_rotation)
 
@@ -240,12 +261,12 @@ class DynamicRectangle:
     @width.setter
     def width(self, new_width: NUMERIC) -> None:
         if not isinstance(new_width, NUMERIC_TYPECHECK):
-            err_msg = (f"[DynamicRectangle.width] `width` must be a numeric "
-                       f"!= 0 (received object of type: {type(new_width)})")
+            err_msg = (f"[{error_trace(self)}] `width` must be a numeric != 0 "
+                       f"(received object of type: {type(new_width)})")
             raise TypeError(err_msg)
         if new_width == 0:
-            err_msg = (f"[DynamicRectangle.width] `width` must be a numeric "
-                       f"!= 0 (received: {new_width})")
+            err_msg = (f"[{error_trace(self)}] `width` must be a numeric != 0 "
+                       f"(received: {new_width})")
             raise ValueError(err_msg)
         self.obj.set_width(new_width)
 

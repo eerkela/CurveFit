@@ -1,6 +1,8 @@
-src/*.pdf
-src/*.png
-src/*.svg
-test/*.pdf
-test/*.png
-test/*.svg
+.gitignore
+*.pdf
+*.png
+*.svg
+test.py
+
+.vscode/*
+curvefit/__pycache__/*

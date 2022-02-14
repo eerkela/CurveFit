@@ -3,6 +3,8 @@ from typing import Union
 
 import matplotlib as mpl
 
+from curvefit.color import DynamicColor
+
 from . import NUMERIC, NUMERIC_TYPECHECK, error_trace
 
 

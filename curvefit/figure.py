@@ -7,8 +7,10 @@ import matplotlib as mpl
 from matplotlib.gridspec import GridSpec, SubplotSpec
 import matplotlib.pyplot as plt
 
+from curvefit.color import DynamicColor
+
 from . import NUMERIC, NUMERIC_TYPECHECK, error_trace
-from .color import color_diff
+# from .color import color_diff
 from .shape import DynamicRectangle
 from .text import DynamicText
 
@@ -68,6 +70,11 @@ class DynamicFigure:
             self._title.visible = False
         else:
             self._title = DynamicText(self.fig._suptitle)
+        # def invert_text_color(color: DynamicColor) -> None:
+        #     color_diff = color.difference(self._title.color)
+        #     if color_diff > self.color_cutoff:
+        #         self._title.color.invert(in_place=True)
+        # self._title.color.callbacks.append(invert_text_color)
 
     @property
     def background(self) -> DynamicFigure.Background:
@@ -220,40 +227,6 @@ class DynamicFigure:
                      **kwargs):
             super().__init__(rect_obj, **kwargs)
             self.parent = parent
-
-        @property
-        def face_color(self) -> tuple[float, float, float]:
-            # matplotlib.colors.to_rgb converts named colors, drops alpha channel
-            return mpl.colors.to_rgb(self.obj.get_facecolor())
-
-        @face_color.setter
-        def face_color(
-            self,
-            new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
-        ) -> None:
-            if not isinstance(new_color, (str, tuple)):
-                err_msg = (f"[DynamicFigure.Background.face_color] "
-                           f"`face_color` must be either a string specifying "
-                           f"a named color or a tuple of numeric RGB values "
-                           f"between 0 and 1 (received object of type: "
-                           f"{type(new_color)})")
-                raise TypeError(err_msg)
-            if (isinstance(new_color, tuple) and
-                (len(new_color) != 3 or
-                not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
-                not all(0 <= v <= 1 for v in new_color))):
-                err_msg = (f"[DynamicFigure.Background.face_color] "
-                           f"`face_color` must be either a string specifying "
-                           f"a named color or a tuple of numeric RGB values "
-                           f"between 0 and 1 (received: {new_color})")
-                raise ValueError(err_msg)
-            if isinstance(new_color, str):
-                self.obj.set_facecolor(new_color)
-            else:
-                self.obj.set_facecolor(new_color + (self.face_alpha,))
-            cdiff = color_diff(self.face_color, self.parent.title.color)
-            if cdiff < self.parent.color_cutoff:
-                self.parent.title.invert_color()
 
         @property
         def height(self) -> float:

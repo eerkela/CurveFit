@@ -2,17 +2,16 @@ from __future__ import annotations
 from collections import defaultdict
 from math import sqrt
 from string import hexdigits
-from typing import Callable, Optional, Union
+from typing import Callable, Iterable, Optional, Union
 
 import matplotlib as mpl
 
-from curvefit import CallableList, error_trace, NUMERIC, NUMERIC_TYPECHECK
+from curvefit import error_trace, NUMERIC, NUMERIC_TYPECHECK
+from curvefit.callback import add_callback, callback_property, remove_callback
 
 
 """
 TODO: Implement Sphinx documentation
-TODO: Add callback decorators
-https://blog.ty-porter.dev/development/2021/08/26/python-decorators-make-callbacks-simple.html
 """
 
 
@@ -30,53 +29,15 @@ def color_diff(rgb1: tuple[NUMERIC, NUMERIC, NUMERIC],
 
 class DynamicColor:
 
+    callback_properties = ("alpha", "hex_code", "hsv", "name", "rgb", "rgba")
+
     def __init__(self,
                  color: Union[str, tuple[NUMERIC, ...]],
-                 color_spec: str = "rgb",
-                 callbacks: Union[list[Callable], CallableList] = None):
-        if not isinstance(color, (str, tuple)):
-            err_msg = (f"[{error_trace(self)}] `color` must be a string "
-                       f"referencing a named color ('white') or hex code of "
-                       f"the form '#rrggbb[aa]', or a tuple of numeric values "
-                       f"between 0 and 1, representing either an `(r, g, b)`, "
-                       f"`(h, s, v)` or `(r, g, b, a)` color specification"
-                       f"(received object of type: {type(color)})")
-            raise TypeError(err_msg)
-        # self.callbacks = CallableList()
-        # if callbacks:
-        #     try:
-        #         self.callbacks.extend(callbacks)
-        #     except (TypeError, ValueError) as exc:
-        #         err_msg = (f"[{error_trace(self)}] `callbacks` must either be "
-        #                    f"a list of callable functions or a CallableList ")
-        #         raise type(exc)(err_msg) from exc
-        if isinstance(color, tuple):
-            allowed_specs = {"rgb", "hsv"}
-            if not isinstance(color_spec, str):
-                err_msg = (f"[{error_trace(self)}] `color_spec` must be a "
-                           f"string with one of the following values: "
-                           f"{allowed_specs} (received object of type: "
-                           f"{type(color_spec)})")
-                raise TypeError(err_msg)
-            if color_spec not in allowed_specs:
-                err_msg = (f"[{error_trace(self)}] `color_spec` must be a "
-                           f"string with one of the following values: "
-                           f"{allowed_specs} (received: {repr(color_spec)})")
-                raise ValueError(err_msg)
-            if color_spec == "rgb":
-                if len(color) == 3:
-                    self.rgb = color
-                else:
-                    self.rgba = color
-            else:
-                self.hsv = color
-        else:
-            if color in NAMED_COLORS:
-                self.name = color
-            else:
-                self.hex_code = color
+                 color_spec: str = "rgb"):
+        self.color_spec = color_spec
+        self.parse(color)
 
-    @property
+    @callback_property
     def alpha(self) -> float:
         return self._alpha
 
@@ -94,10 +55,28 @@ class DynamicColor:
         self._alpha = new_alpha
         hex_alpha = hex(round(255 * self._alpha))
         self._hex_code = self._hex_code[:-2] + hex_alpha
-        # for func in self.callbacks:
-        #     func(self)
 
     @property
+    def color_spec(self) -> str:
+        return self._color_spec
+
+    @color_spec.setter
+    def color_spec(self, new_color_spec: str) -> None:
+        allowed_specs = {"rgb", "hsv"}
+        if not isinstance(new_color_spec, str):
+            err_msg = (f"[{error_trace(self)}] `color_spec` must be a "
+                        f"string with one of the following values: "
+                        f"{allowed_specs} (received object of type: "
+                        f"{type(new_color_spec)})")
+            raise TypeError(err_msg)
+        if new_color_spec not in allowed_specs:
+            err_msg = (f"[{error_trace(self)}] `color_spec` must be a "
+                        f"string with one of the following values: "
+                        f"{allowed_specs} (received: {repr(new_color_spec)})")
+            raise ValueError(err_msg)
+        self._color_spec = new_color_spec
+
+    @callback_property
     def hex_code(self) -> str:
         return self._hex_code
 
@@ -108,7 +87,7 @@ class DynamicColor:
                        f"of the form '#rrggbb' or '#rrggbbaa' (received "
                        f"object of type: {type(new_hex)})")
             raise TypeError(err_msg)
-        if (not len(new_hex) == 7 or len(new_hex) == 9 or
+        if (not (len(new_hex) == 7 or len(new_hex) == 9) or
             not new_hex[0] == "#" or
             not all(c in hexdigits for c in new_hex[1:])):
             err_msg = (f"[{error_trace(self)}] `hex_code` must be a string "
@@ -127,10 +106,8 @@ class DynamicColor:
             self._name = COLORS_NAMED[self._hex_code[:7]][0]
         else:
             self._name = None
-        # for func in self.callbacks:
-        #     func(self)
 
-    @property
+    @callback_property
     def hsv(self) -> tuple[float, float, float]:
         return self._hsv
 
@@ -159,10 +136,8 @@ class DynamicColor:
             self._name = COLORS_NAMED[self._hex_code][0]
         else:
             self._name = None
-        # for func in self.callbacks:
-        #     func(self)
 
-    @property
+    @callback_property
     def name(self) -> Optional[str]:
         return self._name
 
@@ -187,10 +162,8 @@ class DynamicColor:
             self._alpha = 1.0
         self._rgb = mpl.colors.to_rgb(self._hex_code)
         self._hsv = tuple(mpl.colors.rgb_to_hsv(self._rgb))
-        # for func in self.callbacks:
-        #     func(self)
 
-    @property
+    @callback_property
     def rgb(self) -> tuple[float, float, float]:
         return self._rgb
 
@@ -219,10 +192,8 @@ class DynamicColor:
             self._name = COLORS_NAMED[self._hex_code][0]
         else:
             self._name = None
-        # for func in self.callbacks:
-        #     func(self)
 
-    @property
+    @callback_property
     def rgba(self) -> tuple[float, float, float, float]:
         return self._rgb + (self._alpha,)
 
@@ -252,8 +223,6 @@ class DynamicColor:
             self._name = COLORS_NAMED[self._hex_code[:7]][0]
         else:
             self._name = None
-        # for func in self.callbacks:
-        #     func(self)
 
     def blend(self,
               other_color: DynamicColor,
@@ -356,6 +325,33 @@ class DynamicColor:
             return DynamicColor(new_rgb + (self.alpha,))
         return DynamicColor(new_rgb)
 
+    def parse(
+        self,
+        colorlike: Union[str, tuple[NUMERIC, ...], DynamicColor]) -> None:
+        if not isinstance(colorlike, (str, tuple, DynamicColor)):
+            err_msg = (f"[{error_trace(self)}] `color` must be a string "
+                       f"referencing a named color ('white') or hex code of "
+                       f"the form '#rrggbb[aa]', or a tuple of numeric values "
+                       f"between 0 and 1, representing either an `(r, g, b)`, "
+                       f"`(h, s, v)` or `(r, g, b, a)` color specification"
+                       f"(received object of type: {type(colorlike)})")
+            raise TypeError(err_msg)
+        if isinstance(colorlike, tuple):
+            if self.color_spec == "rgb":
+                if len(colorlike) == 3:
+                    self.rgb = colorlike
+                else:
+                    self.rgba = colorlike
+            else:
+                self.hsv = colorlike
+        elif isinstance(colorlike, str):
+            if colorlike in NAMED_COLORS:
+                self.name = colorlike
+            else:
+                self.hex_code = colorlike
+        else:
+            self.rgba = colorlike.rgba
+
     def properties(self) -> dict[str, Union[str, tuple[float, ...]]]:
         prop_dict = {
             "alpha": self.alpha,
@@ -366,11 +362,32 @@ class DynamicColor:
         }
         return prop_dict
 
+    def add_callback(self,
+                     prop_name: Union[str, Iterable[str]],
+                     func: Callable) -> None:
+        if isinstance(prop_name, Iterable):
+            for prop in prop_name:
+                add_callback(self, prop, func)
+        else:
+            add_callback(self, prop_name, func)
+
+    def remove_callback(self,
+                        prop_name: Union[str, Iterable],
+                        func: Callable) -> None:
+        if isinstance(prop_name, Iterable):
+            for prop in prop_name:
+                remove_callback(self, prop, func)
+        else:
+            remove_callback(self, prop_name, func)
+
     def __add__(self, other_color: DynamicColor) -> DynamicColor:
         return self.blend(other_color, mode="add")
 
     def __eq__(self, other_color: DynamicColor) -> bool:
         return self.difference(other_color) == 0.0
+
+    def __hash__(self) -> int:
+        return hash(id(self))
 
     def __ne__(self, other_color: DynamicColor) -> bool:
         return self.difference(other_color) != 0.0

@@ -9,10 +9,10 @@ import matplotlib.pyplot as plt
 
 from curvefit.color import DynamicColor
 
-from . import NUMERIC, NUMERIC_TYPECHECK, error_trace
-# from .color import color_diff
-from .shape import DynamicRectangle
-from .text import DynamicText
+from curvefit import NUMERIC, NUMERIC_TYPECHECK, error_trace
+from curvefit.shape import DynamicRectangle
+from curvefit.text import DynamicText
+
 
 """
 TODO: Implement Sphinx documentation
@@ -70,11 +70,6 @@ class DynamicFigure:
             self._title.visible = False
         else:
             self._title = DynamicText(self.fig._suptitle)
-        # def invert_text_color(color: DynamicColor) -> None:
-        #     color_diff = color.difference(self._title.color)
-        #     if color_diff > self.color_cutoff:
-        #         self._title.color.invert(in_place=True)
-        # self._title.color.callbacks.append(invert_text_color)
 
     @property
     def background(self) -> DynamicFigure.Background:
@@ -227,6 +222,11 @@ class DynamicFigure:
                      **kwargs):
             super().__init__(rect_obj, **kwargs)
             self.parent = parent
+            callback_props = DynamicColor.callback_properties
+            minus_alpha = tuple(p for p in callback_props if p != "alpha")
+            self.face.color.add_callback(minus_alpha, self.maintain_contrast)
+            # self.parent.title.color.add_callback(minus_alpha,
+            #                                      self.maintain_contrast)
 
         @property
         def height(self) -> float:
@@ -243,6 +243,11 @@ class DynamicFigure:
         @width.setter
         def width(self, new_width: NUMERIC) -> None:
             self.parent.width = new_width
+
+        def maintain_contrast(self, color: DynamicColor) -> None:
+            color_diff = color.difference(self.parent.title.color)
+            if color_diff < self.parent.color_cutoff:
+                self.parent.title.color.invert(in_place=True)
 
     class SubplotGrid:
 

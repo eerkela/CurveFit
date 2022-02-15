@@ -3,9 +3,8 @@ from typing import Union
 
 import matplotlib as mpl
 
+from curvefit import NUMERIC, NUMERIC_TYPECHECK, error_trace
 from curvefit.color import DynamicColor
-
-from . import NUMERIC, NUMERIC_TYPECHECK, error_trace
 
 
 """
@@ -81,53 +80,27 @@ class DynamicPatch:
                            f"object of type: {type(parent)})")
                 raise TypeError(err_msg)
             self.parent = parent
+            self._color = DynamicColor(self.parent.obj.get_edgecolor())
+            callback_props = DynamicColor.callback_properties
+            self._color.add_callback(callback_props, self.update_figure)
 
         @property
         def alpha(self) -> float:
-            return self.parent.obj.get_edgecolor()[-1]
+            return self._color.alpha
 
         @alpha.setter
         def alpha(self, new_alpha: NUMERIC) -> None:
-            if not isinstance(new_alpha, NUMERIC_TYPECHECK):
-                err_msg = (f"[{error_trace(self.parent, self)}] `alpha` must "
-                           f"be a numeric between 0 and 1 (received object of "
-                           f"type: {type(new_alpha)})")
-                raise TypeError(err_msg)
-            if not 0 <= new_alpha <= 1:
-                err_msg = (f"[{error_trace(self.parent, self)}] `alpha` must "
-                           f"be a numeric between 0 and 1 (received: "
-                           f"{new_alpha})")
-                raise ValueError(err_msg)
-            self.parent.obj.set_edgecolor(self.color + (new_alpha,))
+            self._color.alpha = new_alpha
 
         @property
-        def color(self) -> tuple[float, float, float]:
-            # matplotlib.colors.to_rgb converts named colors, drops alpha channel
-            return mpl.colors.to_rgb(self.parent.obj.get_edgecolor())
+        def color(self) -> DynamicColor:
+            return self._color
 
         @color.setter
         def color(
             self,
-            new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
-        ) -> None:
-            if not isinstance(new_color, (str, tuple)):
-                err_msg = (f"[{error_trace(self.parent, self)}] `color` must "
-                           f"be either a string specifying a named color or a "
-                           f"tuple of numeric RGB values between 0 and 1 "
-                           f"(received object of type: {type(new_color)})")
-                raise TypeError(err_msg)
-            if isinstance(new_color, tuple):
-                if (len(new_color) != 3 or
-                    not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
-                    not all(0 <= v <= 1 for v in new_color)):
-                    err_msg = (f"[{error_trace(self.parent, self)}] `color` "
-                               f"must be either a string specifying a named "
-                               f"color or a tuple of numeric RGB values "
-                               f"between 0 and 1 (received: {new_color})")
-                    raise ValueError(err_msg)
-                self.parent.obj.set_edgecolor(new_color + (self.alpha,))
-            else:
-                self.parent.obj.set_edgecolor(new_color)
+            new_color: Union[str, tuple[NUMERIC, ...], DynamicColor]) -> None:
+            self._color.parse(new_color)
 
         @property
         def style(self) -> str:
@@ -177,6 +150,9 @@ class DynamicPatch:
             }
             return prop_dict
 
+        def update_figure(self, color: DynamicColor) -> None:
+            self.parent.obj.set_edgecolor(color.rgba)
+
         def __repr__(self) -> str:
             props = [f"{k}={repr(v)}" for k, v in self.properties().items()]
             return (f"DynamicPatch.Border({repr(self.parent)}, "
@@ -191,53 +167,27 @@ class DynamicPatch:
                            f"object of type: {type(parent)})")
                 raise TypeError(err_msg)
             self.parent = parent
+            self._color = DynamicColor(self.parent.obj.get_facecolor())
+            callback_props = DynamicColor.callback_properties
+            self._color.add_callback(callback_props, self.update_figure)
 
         @property
         def alpha(self) -> float:
-            return self.parent.obj.get_facecolor()[-1]
+            return self._color.alpha
 
         @alpha.setter
         def alpha(self, new_alpha: NUMERIC) -> None:
-            if not isinstance(new_alpha, NUMERIC_TYPECHECK):
-                err_msg = (f"[{error_trace(self.parent, self)}] `alpha` must "
-                           f"be a numeric between 0 and 1 (received object of "
-                           f"type: {type(new_alpha)})")
-                raise TypeError(err_msg)
-            if not 0 <= new_alpha <= 1:
-                err_msg = (f"[{error_trace(self.parent, self)}] `alpha` must "
-                           f"be a numeric between 0 and 1 (received: "
-                           f"{new_alpha})")
-                raise ValueError(err_msg)
-            self.parent.obj.set_facecolor(self.color + (new_alpha,))
+            self._color.alpha = new_alpha
 
         @property
-        def color(self) -> tuple[float, float, float]:
-            # matplotlib.colors.to_rgb converts named colors, drops alpha channel
-            return mpl.colors.to_rgb(self.parent.obj.get_facecolor())
+        def color(self) -> DynamicColor:
+            return self._color
 
         @color.setter
         def color(
             self,
-            new_color: Union[str, tuple[NUMERIC, NUMERIC, NUMERIC]]
-        ) -> None:
-            if not isinstance(new_color, (str, tuple)):
-                err_msg = (f"[{error_trace(self.parent, self)}] `color` must "
-                           f"be either a string specifying a named color or "
-                           f"a tuple of numeric RGB values between 0 and 1 "
-                           f"(received object of type: {type(new_color)})")
-                raise TypeError(err_msg)
-            if isinstance(new_color, tuple):
-                if (len(new_color) != 3 or
-                    not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_color) or
-                    not all(0 <= v <= 1 for v in new_color)):
-                    err_msg = (f"[{error_trace(self.parent, self)}] `color` "
-                               f"must be either  a string specifying a named "
-                               f"color or a tuple of numeric RGB values "
-                               f"between 0 and 1 (received: {new_color})")
-                    raise ValueError(err_msg)
-                self.parent.obj.set_facecolor(new_color + (self.alpha,))
-            else:
-                self.parent.obj.set_facecolor(new_color)
+            new_color: Union[str, tuple[NUMERIC, ...], DynamicColor]) -> None:
+            self._color.parse(new_color)
 
         @property
         def hatch(self) -> str:
@@ -283,6 +233,9 @@ class DynamicPatch:
                 "hatch": self.hatch
             }
             return prop_dict
+
+        def update_figure(self, color: DynamicColor) -> None:
+            self.parent.obj.set_facecolor(color.rgba)
 
         def __repr__(self) -> str:
             props = [f"{k}={repr(v)}" for k, v in self.properties().items()]

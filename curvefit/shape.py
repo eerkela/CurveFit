@@ -4,6 +4,7 @@ from typing import Union
 import matplotlib as mpl
 
 from curvefit import NUMERIC, NUMERIC_TYPECHECK, error_trace
+from curvefit.callback import add_callback
 from curvefit.color import DynamicColor
 
 
@@ -81,8 +82,9 @@ class DynamicPatch:
                 raise TypeError(err_msg)
             self.parent = parent
             self._color = DynamicColor(self.parent.obj.get_edgecolor())
-            callback_props = DynamicColor.callback_properties
-            self._color.add_callback(callback_props, self.update_figure)
+            add_callback(self._color,
+                         DynamicColor.callback_properties,
+                         self.update_color)
 
         @property
         def alpha(self) -> float:
@@ -150,7 +152,7 @@ class DynamicPatch:
             }
             return prop_dict
 
-        def update_figure(self, color: DynamicColor) -> None:
+        def update_color(self, color: DynamicColor) -> None:
             self.parent.obj.set_edgecolor(color.rgba)
 
         def __repr__(self) -> str:
@@ -168,8 +170,9 @@ class DynamicPatch:
                 raise TypeError(err_msg)
             self.parent = parent
             self._color = DynamicColor(self.parent.obj.get_facecolor())
-            callback_props = DynamicColor.callback_properties
-            self._color.add_callback(callback_props, self.update_figure)
+            add_callback(self._color,
+                         DynamicColor.callback_properties,
+                         self.update_color)
 
         @property
         def alpha(self) -> float:
@@ -234,7 +237,7 @@ class DynamicPatch:
             }
             return prop_dict
 
-        def update_figure(self, color: DynamicColor) -> None:
+        def update_color(self, color: DynamicColor) -> None:
             self.parent.obj.set_facecolor(color.rgba)
 
         def __repr__(self) -> str:

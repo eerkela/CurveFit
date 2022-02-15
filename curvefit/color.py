@@ -362,24 +362,6 @@ class DynamicColor:
         }
         return prop_dict
 
-    def add_callback(self,
-                     prop_name: Union[str, Iterable[str]],
-                     func: Callable) -> None:
-        if isinstance(prop_name, Iterable):
-            for prop in prop_name:
-                add_callback(self, prop, func)
-        else:
-            add_callback(self, prop_name, func)
-
-    def remove_callback(self,
-                        prop_name: Union[str, Iterable],
-                        func: Callable) -> None:
-        if isinstance(prop_name, Iterable):
-            for prop in prop_name:
-                remove_callback(self, prop, func)
-        else:
-            remove_callback(self, prop_name, func)
-
     def __add__(self, other_color: DynamicColor) -> DynamicColor:
         return self.blend(other_color, mode="add")
 

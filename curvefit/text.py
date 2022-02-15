@@ -4,6 +4,7 @@ from typing import Union
 import matplotlib as mpl
 
 from curvefit import NUMERIC, NUMERIC_TYPECHECK, error_trace
+from curvefit.callback import add_callback
 from curvefit.color import DynamicColor
 
 
@@ -42,8 +43,9 @@ class DynamicText:
         # see matplotlib.text.Text.set_linespacing if default changes in future
         self._line_spacing = 1.2  # matplotlib default value (02/07/2022)
         self._color = DynamicColor(self.obj.get_color())
-        callback_props = DynamicColor.callback_properties
-        self._color.add_callback(callback_props, self.update_text_color)
+        add_callback(self._color,
+                     DynamicColor.callback_properties,
+                     self.update_color)
         for k, v in kwargs.items():
             setattr(self, k, v)
 
@@ -285,7 +287,7 @@ class DynamicText:
         }
         return prop_dict
 
-    def update_text_color(self, color: DynamicColor) -> None:
+    def update_color(self, color: DynamicColor) -> None:
         self.obj.set_color(color.rgba)
 
     def __repr__(self) -> str:

@@ -10,7 +10,7 @@ package can be found here: https://github.com/glue-viz/echo
 from __future__ import annotations
 from contextlib import contextmanager
 from functools import partial
-from typing import Callable
+from typing import Callable, Iterable, Union
 import weakref
 from weakref import WeakKeyDictionary
 
@@ -248,7 +248,7 @@ class CallbackProperty(object):
 
 
 def add_callback(instance,
-                 prop_name: str,
+                 prop_name: Union[str, Iterable[str]],
                  callback: Callable,
                  priority: int = 0) -> None:
     """
@@ -274,13 +274,22 @@ def add_callback(instance,
         f = Foo()
         add_callback(f, 'bar', callback)
     """
-    prop = getattr(type(instance), prop_name)
-    if not isinstance(prop, CallbackProperty):
-        raise TypeError(f"{prop_name} is not a CallbackProperty")
-    prop.add_callback(instance, callback, priority=priority)
+    if isinstance(prop_name, Iterable):
+        for pname in prop_name:
+            prop = getattr(type(instance), pname)
+            if not isinstance(prop, CallbackProperty):
+                raise TypeError(f"{pname} is not a CallbackProperty")
+            prop.add_callback(instance, callback, priority=priority)
+    else:
+        prop = getattr(type(instance), prop_name)
+        if not isinstance(prop, CallbackProperty):
+            raise TypeError(f"{prop_name} is not a CallbackProperty")
+        prop.add_callback(instance, callback, priority=priority)
 
 
-def remove_callback(instance, prop_name: str, callback: Callable) -> None:
+def remove_callback(instance,
+                    prop_name: Union[str, Iterable[str]],
+                    callback: Callable) -> None:
     """
     Remove a callback function from a property in an instance
     Parameters
@@ -292,10 +301,17 @@ def remove_callback(instance, prop_name: str, callback: Callable) -> None:
     callback : func
         The callback function to remove
     """
-    prop = getattr(type(instance), prop_name)
-    if not isinstance(prop, CallbackProperty):
-        raise TypeError(f"{prop_name} is not a CallbackProperty")
-    prop.remove_callback(instance, callback)
+    if isinstance(prop_name, Iterable):
+        for pname in prop_name:
+            prop = getattr(type(instance), pname)
+            if not isinstance(prop, CallbackProperty):
+                raise TypeError(f"{pname} is not a CallbackProperty")
+            prop.remove_callback(instance, callback)
+    else:
+        prop = getattr(type(instance), prop_name)
+        if not isinstance(prop, CallbackProperty):
+            raise TypeError(f"{prop_name} is not a CallbackProperty")
+        prop.remove_callback(instance, callback)
 
 
 def callback_property(getter: Callable) -> CallbackProperty:

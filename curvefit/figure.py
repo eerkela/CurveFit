@@ -7,9 +7,9 @@ import matplotlib as mpl
 from matplotlib.gridspec import GridSpec, SubplotSpec
 import matplotlib.pyplot as plt
 
-from curvefit.color import DynamicColor
-
 from curvefit import NUMERIC, NUMERIC_TYPECHECK, error_trace
+from curvefit.callback import add_callback
+from curvefit.color import DynamicColor
 from curvefit.shape import DynamicRectangle
 from curvefit.text import DynamicText
 
@@ -216,6 +216,10 @@ class DynamicFigure:
 
     class Background(DynamicRectangle):
 
+        """
+        TODO: replace this with callback system
+        """
+
         def __init__(self,
                      rect_obj: mpl.patches.Rectangle,
                      parent: DynamicFigure,
@@ -224,8 +228,8 @@ class DynamicFigure:
             self.parent = parent
             callback_props = DynamicColor.callback_properties
             minus_alpha = tuple(p for p in callback_props if p != "alpha")
-            self.face.color.add_callback(minus_alpha, self.maintain_contrast)
-            # self.parent.title.color.add_callback(minus_alpha,
+            add_callback(self.face.color, minus_alpha, self.maintain_contrast)
+            # add_callback(self.parent.title.color, minus_alpha,
             #                                      self.maintain_contrast)
 
         @property

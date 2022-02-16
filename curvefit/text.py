@@ -10,6 +10,7 @@ from curvefit.color import DynamicColor
 
 """
 TODO: Implement Sphinx documentation
+TODO: if not visible, have getters return None
 """
 
 

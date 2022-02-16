@@ -32,10 +32,7 @@ from curvefit import error_trace, NUMERIC, NUMERIC_TYPECHECK
 from curvefit.callback import callback_property
 
 
-NAMED_COLORS = {}
-for k, v in mpl.colors.get_named_colors_mapping().items():
-    if isinstance(v, str):
-        NAMED_COLORS[k] = v.lower()
+NAMED_COLORS = mpl.colors.get_named_colors_mapping()
 COLORS_NAMED = defaultdict(list)
 for k, v in NAMED_COLORS.items():
     COLORS_NAMED[v].append(k)
@@ -93,7 +90,8 @@ class DynamicColor:
                        f"between 0 and 1 (received: {repr(new_alpha)})")
             raise ValueError(err_msg)
         self._alpha = new_alpha
-        self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
+        hex_alpha = hex(round(255 * self._alpha))
+        self._hex_code = self._hex_code[:-2] + hex_alpha
 
     @property
     def color_spec(self) -> str:
@@ -174,9 +172,9 @@ class DynamicColor:
                        f"{new_hex})")
             raise ValueError(err_msg)
         if len(new_hex) == 9:
-            self._hex_code = new_hex.lower()
+            self._hex_code = new_hex
         else:
-            self._hex_code = new_hex.lower() + "ff"
+            self._hex_code = new_hex + "ff"
         rgba = mpl.colors.to_rgba(self._hex_code)
         self._rgb = rgba[:-1]
         self._alpha = rgba[-1]
@@ -231,11 +229,14 @@ class DynamicColor:
             raise ValueError(err_msg)
         self._hsv = new_hsv
         self._rgb = tuple(mpl.colors.hsv_to_rgb(self._hsv))
-        if not hasattr(self, "_alpha"):
+        if hasattr(self, "_alpha"):
+            hex_alpha = hex(round(255 * self._alpha))[-2:]
+            self._hex_code = mpl.colors.to_hex(self._rgb) + hex_alpha
+        else:
+            self._hex_code = mpl.colors.to_hex(self._rgb) + "ff"
             self._alpha = 1.0
-        self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
-        if self._hex_code[:7] in COLORS_NAMED:
-            self._name = COLORS_NAMED[self._hex_code[:7]][0]
+        if self._hex_code in COLORS_NAMED:
+            self._name = COLORS_NAMED[self._hex_code][0]
         else:
             self._name = None
 
@@ -281,10 +282,13 @@ class DynamicColor:
                        f"{repr(new_color)})")
             raise ValueError(err_msg)
         self._name = new_color
-        self._rgb = mpl.colors.to_rgb(NAMED_COLORS[self._name])
-        if not hasattr(self, "_alpha"):
+        if hasattr(self, "_alpha"):
+            hex_alpha = hex(round(255 * self._alpha))[-2:]
+            self._hex_code = NAMED_COLORS[self._name] + hex_alpha
+        else:
+            self._hex_code = NAMED_COLORS[self._name] + "ff"
             self._alpha = 1.0
-        self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
+        self._rgb = mpl.colors.to_rgb(self._hex_code)
         self._hsv = tuple(mpl.colors.rgb_to_hsv(self._rgb))
 
     @callback_property
@@ -332,11 +336,14 @@ class DynamicColor:
             raise ValueError(err_msg)
         self._rgb = new_rgb
         self._hsv = tuple(mpl.colors.rgb_to_hsv(self._rgb))
-        if not hasattr(self, "_alpha"):
+        if hasattr(self, "_alpha"):
+            hex_alpha = hex(round(255 * self._alpha))[-2:]
+            self._hex_code = mpl.colors.to_hex(self._rgb) + hex_alpha
+        else:
+            self._hex_code = mpl.colors.to_hex(self._rgb) + "ff"
             self._alpha = 1.0
-        self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
-        if self._hex_code[:7] in COLORS_NAMED:
-            self._name = COLORS_NAMED[self._hex_code[:7]][0]
+        if self._hex_code in COLORS_NAMED:
+            self._name = COLORS_NAMED[self._hex_code][0]
         else:
             self._name = None
 
@@ -387,7 +394,8 @@ class DynamicColor:
             raise ValueError(err_msg)
         self._rgb = new_rgba[:-1]
         self._alpha = new_rgba[-1]
-        self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
+        hex_alpha = hex(round(self._alpha))[-2:]
+        self._hex_code = mpl.colors.to_hex(self._rgb) + hex_alpha
         self._hsv = tuple(mpl.colors.rgb_to_hsv(self._rgb))
         if self._hex_code[:7] in COLORS_NAMED:
             self._name = COLORS_NAMED[self._hex_code[:7]][0]

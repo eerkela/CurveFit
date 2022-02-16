@@ -274,17 +274,17 @@ def add_callback(instance,
         f = Foo()
         add_callback(f, 'bar', callback)
     """
-    if isinstance(prop_name, Iterable):
+    if isinstance(prop_name, str):
+        prop = getattr(type(instance), prop_name)
+        if not isinstance(prop, CallbackProperty):
+            raise TypeError(f"{prop_name} is not a CallbackProperty")
+        prop.add_callback(instance, callback, priority=priority)
+    else:
         for pname in prop_name:
             prop = getattr(type(instance), pname)
             if not isinstance(prop, CallbackProperty):
                 raise TypeError(f"{pname} is not a CallbackProperty")
             prop.add_callback(instance, callback, priority=priority)
-    else:
-        prop = getattr(type(instance), prop_name)
-        if not isinstance(prop, CallbackProperty):
-            raise TypeError(f"{prop_name} is not a CallbackProperty")
-        prop.add_callback(instance, callback, priority=priority)
 
 
 def remove_callback(instance,
@@ -301,17 +301,17 @@ def remove_callback(instance,
     callback : func
         The callback function to remove
     """
-    if isinstance(prop_name, Iterable):
+    if isinstance(prop_name, str):
+        prop = getattr(type(instance), prop_name)
+        if not isinstance(prop, CallbackProperty):
+            raise TypeError(f"{prop_name} is not a CallbackProperty")
+        prop.remove_callback(instance, callback)
+    else:
         for pname in prop_name:
             prop = getattr(type(instance), pname)
             if not isinstance(prop, CallbackProperty):
                 raise TypeError(f"{pname} is not a CallbackProperty")
             prop.remove_callback(instance, callback)
-    else:
-        prop = getattr(type(instance), prop_name)
-        if not isinstance(prop, CallbackProperty):
-            raise TypeError(f"{prop_name} is not a CallbackProperty")
-        prop.remove_callback(instance, callback)
 
 
 def callback_property(getter: Callable) -> CallbackProperty:

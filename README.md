@@ -1,3 +1,5 @@
+# UNDER DEVELOPMENT
+
 # CurveFit
 This repository describes a generic curve-fitting utility meant for use in data science workloads.
 

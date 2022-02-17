@@ -1,8 +1,10 @@
-.gitignore
 *.pdf
 *.png
 *.svg
 test.py
 
 .vscode/*
+docs/*
+whitepapers/*
 curvefit/__pycache__/*
+curvefit/test/__pycache__/*

@@ -249,7 +249,7 @@ class DynamicFigure:
             self.parent.width = new_width
 
         def maintain_contrast(self, color: DynamicColor) -> None:
-            color_diff = color.difference(self.parent.title.color)
+            color_diff = color.distance(self.parent.title.color)
             if color_diff < self.parent.color_cutoff:
                 self.parent.title.color.invert(in_place=True)
 

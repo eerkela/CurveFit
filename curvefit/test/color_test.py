@@ -38,7 +38,7 @@ class DynamicColorTestCases(unittest.TestCase):
         assert_equal_float(color.rgba, (0.0, 1.0, 0.0, 0.50196))
 
     def test_init_hsv(self):
-        color = DynamicColor((0.16666666, 1.0, 1.0), color_spec="hsv")  # yellow
+        color = DynamicColor((0.16666666, 1.0, 1.0), space="hsv")  # yellow
         assert_equal_float(color.alpha, 1.0)
         self.assertEqual(color.hex_code, "#ffff00ff")
         assert_equal_float(color.hsv, (0.16666, 1.0, 1.0))
@@ -244,7 +244,7 @@ class DynamicColorTestCases(unittest.TestCase):
 
     def test_hue_sweep(self):
         starting_color = (0.0, 1.0, 1.0)
-        color = DynamicColor(starting_color, color_spec="hsv")
+        color = DynamicColor(starting_color, space="hsv")
         for test_hue in np.linspace(0, 1, num=256):
             # get expected values:
             expected_hsv = (test_hue,) + starting_color[1:]
@@ -261,7 +261,7 @@ class DynamicColorTestCases(unittest.TestCase):
 
     def test_saturation_sweep(self):
         starting_color = (0.0, 0.0, 1.0)
-        color = DynamicColor(starting_color, color_spec="hsv")
+        color = DynamicColor(starting_color, space="hsv")
         for test_sat in np.linspace(0, 1, num=256):
             # get expected values:
             expected_hsv = starting_color[:1] + (test_sat,) + starting_color[2:]
@@ -278,7 +278,7 @@ class DynamicColorTestCases(unittest.TestCase):
 
     def test_value_sweep(self):
         starting_color = (0.0, 1.0, 0.0)
-        color = DynamicColor(starting_color, color_spec="hsv")
+        color = DynamicColor(starting_color, space="hsv")
         for test_val in np.linspace(0, 1, num=256):
             # get expected values:
             expected_hsv = starting_color[:2] + (test_val,)
@@ -369,7 +369,7 @@ class DynamicColorTestCases(unittest.TestCase):
         def callback(color_instance):
             color_instance.hsv = (0, 0, 0)
 
-        color = DynamicColor((0, 0, 1), color_spec="hsv")
+        color = DynamicColor((0, 0, 1), space="hsv")
         add_callback(color, "hsv", callback)
         assert_equal_float(color.hsv, (0.0, 0.0, 1.0))
         color.hsv = (0.0, 0.0, 1.0)  # no state change
@@ -412,3 +412,599 @@ class DynamicColorTestCases(unittest.TestCase):
         assert_equal_float(color.rgba, (1.0, 1.0, 1.0, 1.0))  # callback not invoked
         color.rgba = (1.0, 0.0, 0.0, 1.0)  # state change
         assert_equal_float(color.rgba, (0.0, 0.0, 0.0, 0.0))  # callback invoked
+
+    def test_alpha_errors(self):
+        bad_type = "1"
+        negative = -1
+        too_high = 1.5
+
+        # bad_type
+        color = DynamicColor("black")
+        with self.assertRaises(TypeError) as cm:
+            color.alpha = bad_type
+        err_msg = ("[DynamicColor.alpha] `alpha` must be a numeric between 0 "
+                   "and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # negative
+        with self.assertRaises(ValueError) as cm:
+            color.alpha = negative
+        err_msg = ("[DynamicColor.alpha] `alpha` must be a numeric between 0 "
+                   "and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # too_high
+        with self.assertRaises(ValueError) as cm:
+            color.alpha = too_high
+        err_msg = ("[DynamicColor.alpha] `alpha` must be a numeric between 0 "
+                   "and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+    def test_hex_code_errors(self):
+        bad_type = 123456789  # length 9
+        no_hash = "ffffff"
+        bad_length = "#fffff"
+        bad_value = "#fffffg"
+
+        # bad_type
+        color = DynamicColor("#000000")
+        with self.assertRaises(TypeError) as cm:
+            color.hex_code = bad_type
+        err_msg = ("[DynamicColor.hex_code] `hex_code` must be a string of the "
+                   "form '#rrggbb' or '#rrggbbaa'")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # no_hash
+        with self.assertRaises(ValueError) as cm:
+            color.hex_code = no_hash
+        err_msg = ("[DynamicColor.hex_code] `hex_code` must be a string of the "
+                   "form '#rrggbb' or '#rrggbbaa'")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_length
+        with self.assertRaises(ValueError) as cm:
+            color.hex_code = bad_length
+        err_msg = ("[DynamicColor.hex_code] `hex_code` must be a string of the "
+                   "form '#rrggbb' or '#rrggbbaa'")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_value
+        with self.assertRaises(ValueError) as cm:
+            color.hex_code = bad_value
+        err_msg = ("[DynamicColor.hex_code] `hex_code` must be a string of the "
+                   "form '#rrggbb' or '#rrggbbaa'")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+    def test_hsv_errors(self):
+        bad_type = [1, 1, 1]
+        bad_length = (0, 0.0, 0, 1.0)
+        bad_val_type = (0.0, "0", 1)
+        negative = (0, -0.2, 0.5)
+        too_high = (1, 1.5, 0.5)
+
+        # bad_type
+        color = DynamicColor((0, 0, 0), space="hsv")
+        with self.assertRaises(TypeError) as cm:
+            color.hsv = bad_type
+        err_msg = ("[DynamicColor.hsv] `hsv` must be a length-3 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_length
+        with self.assertRaises(ValueError) as cm:
+            color.hsv = bad_length
+        err_msg = ("[DynamicColor.hsv] `hsv` must be a length-3 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_val_type
+        with self.assertRaises(ValueError) as cm:
+            color.hsv = bad_val_type
+        err_msg = ("[DynamicColor.hsv] `hsv` must be a length-3 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # negative
+        with self.assertRaises(ValueError) as cm:
+            color.hsv = negative
+        err_msg = ("[DynamicColor.hsv] `hsv` must be a length-3 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # too_high
+        with self.assertRaises(ValueError) as cm:
+            color.hsv = too_high
+        err_msg = ("[DynamicColor.hsv] `hsv` must be a length-3 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+    def test_named_color_errors(self):
+        bad_type = 24.0
+        not_recognized = "this is not a named color"
+
+        # bad_type
+        color = DynamicColor("black")
+        with self.assertRaises(TypeError) as cm:
+            color.name = bad_type
+        err_msg = ("[DynamicColor.name] `name` must be a string referencing a "
+                   "key in `NAMED_COLORS`")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # not_recognized
+        with self.assertRaises(ValueError) as cm:
+            color.name = not_recognized
+        err_msg = ("[DynamicColor.name] `name` must be a string referencing a "
+                   "key in `NAMED_COLORS`")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+    def test_rgb_errors(self):
+        bad_type = [1, 1, 1]
+        bad_length = (0, 0.0, 0, 1.0)
+        bad_val_type = (0.0, "0", 1)
+        negative = (0, -0.2, 0.5)
+        too_high = (1, 1.5, 0.5)
+
+        # bad_type
+        color = DynamicColor((0, 0, 0))
+        with self.assertRaises(TypeError) as cm:
+            color.rgb = bad_type
+        err_msg = ("[DynamicColor.rgb] `rgb` must be a length-3 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_length
+        with self.assertRaises(ValueError) as cm:
+            color.rgb = bad_length
+        err_msg = ("[DynamicColor.rgb] `rgb` must be a length-3 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_val_type
+        with self.assertRaises(ValueError) as cm:
+            color.rgb = bad_val_type
+        err_msg = ("[DynamicColor.rgb] `rgb` must be a length-3 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # negative
+        with self.assertRaises(ValueError) as cm:
+            color.rgb = negative
+        err_msg = ("[DynamicColor.rgb] `rgb` must be a length-3 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # too_high
+        with self.assertRaises(ValueError) as cm:
+            color.rgb = too_high
+        err_msg = ("[DynamicColor.rgb] `rgb` must be a length-3 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+    def test_rgba_errors(self):
+        bad_type = [1, 1, 1, 1]
+        bad_length = (0, 0.0, 0)
+        bad_val_type = (0.0, "0", 1, 0.2)
+        negative = (0, -0.2, 0.5, 1)
+        too_high = (1, 1.5, 0.5, 0.8)
+
+        # bad_type
+        color = DynamicColor((0, 0, 0, 1.0))
+        with self.assertRaises(TypeError) as cm:
+            color.rgba = bad_type
+        err_msg = ("[DynamicColor.rgba] `rgba` must be a length-4 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_length
+        with self.assertRaises(ValueError) as cm:
+            color.rgba = bad_length
+        err_msg = ("[DynamicColor.rgba] `rgba` must be a length-4 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_val_type
+        with self.assertRaises(ValueError) as cm:
+            color.rgba = bad_val_type
+        err_msg = ("[DynamicColor.rgba] `rgba` must be a length-4 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # negative
+        with self.assertRaises(ValueError) as cm:
+            color.rgba = negative
+        err_msg = ("[DynamicColor.rgba] `rgba` must be a length-4 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # too_high
+        with self.assertRaises(ValueError) as cm:
+            color.rgba = too_high
+        err_msg = ("[DynamicColor.rgba] `rgba` must be a length-4 tuple of "
+                   "numerics between 0 and 1")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+    def test_additive_blend(self):
+        # basic additive blend
+        start = DynamicColor((0.1, 0.2, 0.3))
+        blend = start.blend((0.1, 0.1, 0.1), mode="add")
+        assert_equal_float(blend.rgb, (0.2, 0.3, 0.4))
+
+        # clipping
+        start = DynamicColor((0.7, 0.8, 0.9))
+        blend = start.blend((0.2, 0.2, 0.2), mode="add")
+        assert_equal_float(blend.rgb, (0.9, 1.0, 1.0))
+
+        # quick blend
+        start = DynamicColor((0.5, 0.5, 0.5))
+        blend = start + (0.5, 0.5, 0.5)
+        assert_equal_float(blend.rgb, (1.0, 1.0, 1.0))
+
+        # in-place blend
+        start = DynamicColor((0.1, 0.2, 0.3))
+        start.blend((0.2, 0.2, 0.2), mode="add", in_place=True)
+        assert_equal_float(start.rgb, (0.3, 0.4, 0.5))
+
+        # quick blend in-place
+        start = DynamicColor((0.3, 0.2, 0.1))
+        start += (0.1, 0.2, 0.3)
+        assert_equal_float(start.rgb, (0.4, 0.4, 0.4))
+
+    def test_subtractive_blend(self):
+        # basic subtractive blend
+        start = DynamicColor((0.9, 0.8, 0.7))
+        blend = start.blend((0.1, 0.1, 0.1), mode="subtract")
+        assert_equal_float(blend.rgb, (0.8, 0.7, 0.6))
+
+        # clipping
+        start = DynamicColor((0.1, 0.2, 0.3))
+        blend = start.blend((0.2, 0.2, 0.2), mode="subtract")
+        assert_equal_float(blend.rgb, (0.0, 0.0, 0.1))
+
+        # quick blend
+        start = DynamicColor((0.5, 0.5, 0.5))
+        blend = start - (0.5, 0.5, 0.5)
+        assert_equal_float(blend.rgb, (0.0, 0.0, 0.0))
+
+        # in-place blend
+        start = DynamicColor((0.9, 0.7, 0.5))
+        start.blend((0.2, 0.2, 0.2), mode="subtract", in_place=True)
+        assert_equal_float(start.rgb, (0.7, 0.5, 0.3))
+
+        # quick blend in-place
+        start = DynamicColor((0.5, 0.5, 0.5))
+        start -= (0.1, 0.2, 0.3)
+        assert_equal_float(start.rgb, (0.4, 0.3, 0.2))
+
+    def test_difference_blend(self):
+        # basic difference blend
+        start = DynamicColor((0.9, 0.8, 0.7))
+        blend = start.blend((0.1, 0.1, 0.1), mode="difference")
+        assert_equal_float(blend.rgb, (0.8, 0.7, 0.6))
+
+        # clipping
+        start = DynamicColor((0.1, 0.2, 0.3))
+        blend = start.blend((0.2, 0.2, 0.2), mode="difference")
+        assert_equal_float(blend.rgb, (0.1, 0.0, 0.1))
+
+        # in-place blend
+        start = DynamicColor((0.5, 0.5, 0.5))
+        start.blend((0.5, 0.5, 0.5), mode="difference", in_place=True)
+        assert_equal_float(start.rgb, (0.0, 0.0, 0.0))
+
+    def test_multiplicative_blend(self):
+        # basic multiplicative blend
+        start = DynamicColor((0.5, 0.5, 0.5))
+        blend = start.blend((0.5, 0.5, 0.5), mode="multiply")
+        assert_equal_float(blend.rgb, (0.25, 0.25, 0.25))
+
+        # quick blend
+        start = DynamicColor((1, 1, 1))
+        blend = start * (0, 0, 0)
+        assert_equal_float(blend.rgb, (0.0, 0.0, 0.0))
+
+        # in-place blend
+        start = DynamicColor((0.1, 0.2, 0.3))
+        start.blend((0.1, 0.2, 0.3), mode="multiply", in_place=True)
+        assert_equal_float(start.rgb, (0.01, 0.04, 0.09))
+
+        # quick blend in-place
+        start = DynamicColor((0.9, 0.8, 0.7))
+        start *= (0.1, 0.2, 0.3)
+        assert_equal_float(start.rgb, (0.09, 0.16, 0.21))
+
+    def test_division_blend(self):
+        # basic division blend
+        start = DynamicColor((0.5, 0.5, 0.5))
+        blend = start.blend((0.9, 0.8, 0.7), mode="divide")
+        assert_equal_float(blend.rgb, (0.55555, 0.625, 0.71429))
+
+        # clipping
+        start = DynamicColor((0.5, 0.5, 0.5))
+        blend = start.blend((0.1, 1, 0), mode="divide")
+        assert_equal_float(blend.rgb, (1.0, 0.5, 1.0))
+
+        # quick blend
+        start = DynamicColor((0.1, 0.2, 0.3))
+        blend = start / (0.1, 0.2, 0.3)
+        assert_equal_float(blend.rgb, (1.0, 1.0, 1.0))
+
+        # in-place blend
+        start = DynamicColor((0.1, 0.2, 0.3))
+        start.blend((0.5, 0.5, 0.5), mode="divide", in_place=True)
+        assert_equal_float(start.rgb, (0.2, 0.4, 0.6))
+
+        # quick blend in-place
+        start = DynamicColor((0.2, 0.2, 0.2))
+        start /= (0.3, 0.4, 0.5)
+        assert_equal_float(start.rgb, (0.66666, 0.5, 0.4))
+
+    def test_burn_blend(self):
+        # basic burn blend
+        start = DynamicColor((0.5, 0.5, 0.5))
+        blend = start.blend((0.6, 0.7, 0.8), mode="burn")
+        assert_equal_float(blend.rgb, (0.16666, 0.28571, 0.375))
+
+        # clipping
+        start = DynamicColor((0.9, 0.8, 0.7))
+        blend = start.blend((0.2, 0.1, 0.0), mode="burn")
+        assert_equal_float(blend.rgb, (0.5, 0.0, 0.0))
+
+        # in-place blend
+        start = DynamicColor((0.8, 0.7, 0.6))
+        start.blend((1, 1, 1), mode="burn", in_place=True)
+        assert_equal_float(start.rgb, (0.8, 0.7, 0.6))
+
+    def test_dodge_blend(self):
+        # basic dodge blend
+        start = DynamicColor((0.5, 0.5, 0.5))
+        blend = start.blend((0.1, 0.2, 0.3), mode="dodge")
+        assert_equal_float(blend.rgb, (0.55555, 0.625, 0.71429))
+
+        # clipping
+        start = DynamicColor((0.4, 0.4, 0.4))
+        blend = start.blend((0.5, 0.6, 0.7), mode="dodge")
+        assert_equal_float(blend.rgb, (0.8, 1.0, 1.0))
+
+        # in-place blend
+        start = DynamicColor((0.9, 0.8, 0.7))
+        start.blend((0.0, 0.0, 0.0), mode="dodge", in_place=True)
+        assert_equal_float(start.rgb, (0.9, 0.8, 0.7))
+
+    def test_screen_blend(self):
+        # basic screen blend
+        start = DynamicColor((0.1, 0.2, 0.3))
+        blend = start.blend((0.1, 0.2, 0.3), mode="screen")
+        assert_equal_float(blend.rgb, (0.19, 0.36, 0.51))
+
+        # in-place blend
+        start = DynamicColor((0.5, 0.5, 0.5))
+        start.blend((0.3, 0.5, 0.7), mode="screen", in_place=True)
+        assert_equal_float(start.rgb, (0.65, 0.75, 0.85))
+
+    def test_overlay_blend(self):
+        # basic overlay blend
+        start = DynamicColor((0.1, 0.2, 0.3))
+        blend = start.blend((0.1, 0.2, 0.3), mode="screen")
+        assert_equal_float(blend.rgb, (0.19, 0.36, 0.51))
+
+        # in-place blend
+        start = DynamicColor((0.5, 0.5, 0.5))
+        start.blend((0.3, 0.5, 0.7), mode="screen", in_place=True)
+        assert_equal_float(start.rgb, (0.65, 0.75, 0.85))
+
+    def test_hard_light_blend(self):
+        # basic hard light blend
+        start = DynamicColor((0.1, 0.2, 0.3))
+        blend = start.blend((0.6, 0.7, 0.8), mode="hard light")
+        assert_equal_float(blend.rgb, (0.28, 0.52, 0.72))
+
+        # in-place blend
+        start = DynamicColor((0.9, 0.8, 0.7))
+        start.blend((0.1, 0.2, 0.3), mode="hard light", in_place=True)
+        assert_equal_float(start.rgb, (0.18, 0.32, 0.42))
+
+    def test_soft_light_blend(self):
+        # basic soft light blend
+        start = DynamicColor((0.1, 0.2, 0.3))
+        blend = start.blend((0.9, 0.8, 0.7), mode="soft light")
+        assert_equal_float(blend.rgb, (0.172, 0.296, 0.384))
+
+        # in-place blend
+        start = DynamicColor((0.3, 0.3, 0.3))
+        start.blend((0.4, 0.5, 0.6), mode="soft light", in_place=True)
+        assert_equal_float(start.rgb, (0.258, 0.3, 0.342))
+
+    def test_darken_blend(self):
+        # basic darken blend
+        start = DynamicColor((0.4, 0.5, 0.6))
+        blend = start.blend((0.6, 0.5, 0.4), mode="darken")
+        assert_equal_float(blend.rgb, (0.4, 0.5, 0.4))
+
+        # in-place blend
+        start = DynamicColor((0.1, 0.3, 0.5))
+        start.blend((0.2, 0.3, 0.4), mode="darken", in_place=True)
+        assert_equal_float(start.rgb, (0.1, 0.3, 0.4))
+
+    def test_lighten_blend(self):
+        # basic lighten blend
+        start = DynamicColor((0.4, 0.5, 0.6))
+        blend = start.blend((0.6, 0.5, 0.4), mode="lighten")
+        assert_equal_float(blend.rgb, (0.6, 0.5, 0.6))
+
+        # in-place blend
+        start = DynamicColor((0.1, 0.3, 0.5))
+        start.blend((0.2, 0.3, 0.4), mode="lighten", in_place=True)
+        assert_equal_float(start.rgb, (0.2, 0.3, 0.5))
+
+    def test_blend_errors(self):
+        bad_color_type = 12345
+        bad_color_value = "this is not a color-like"
+        bad_mode_type = 42
+        bad_mode_value = "fake_space"
+
+        # bad_color_type
+        color = DynamicColor("red")
+        with self.assertRaises(TypeError) as cm:
+            color.blend(bad_color_type, mode="multiply")
+        err_msg = ("[DynamicColor.blend] `other_color` must be either an "
+                   "instance of DynamicColor or a color-like object that can "
+                   "be easily converted into one")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_color_value
+        with self.assertRaises(ValueError) as cm:
+            color.blend(bad_color_value, mode="multiply")
+        err_msg = ("[DynamicColor.blend] `other_color` must be either an "
+                   "instance of DynamicColor or a color-like object that can "
+                   "be easily converted into one")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_mode_type
+        with self.assertRaises(TypeError) as cm:
+            color.blend((0.5, 0.5, 0.5), mode=bad_mode_type)
+        err_msg = ("[DynamicColor.blend] `mode` must be a string with one of "
+                   "the following values:")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_mode_value
+        with self.assertRaises(ValueError) as cm:
+            color.blend((0.5, 0.5, 0.5), mode=bad_mode_value)
+        err_msg = ("[DynamicColor.blend] `mode` must be a string with one of "
+                   "the following values:")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+    def test_distance_measure(self):
+        # unweighted distance
+        color = DynamicColor((1, 1, 1))
+        assert_equal_float(color.distance((1, 1, 1)), 0.0)
+        assert_equal_float(color.distance((0, 0, 0)), 1.73205)
+
+        # weighted redmean distance
+        assert_equal_float(color.distance((1, 1, 1), weighted=True), 0.0)
+        assert_equal_float(color.distance((0, 0, 0), weighted=True), 2.99935)
+
+    def test_distance_measure_errors(self):
+        bad_color_type = 12345
+        bad_color_value = "this is not a color-like"
+
+        # bad_color_type
+        color = DynamicColor("red")
+        with self.assertRaises(TypeError) as cm:
+            color.distance(bad_color_type)
+        err_msg = ("[DynamicColor.distance] `other_color` must be either an "
+                   "instance of DynamicColor or a color-like object that can "
+                   "be easily converted into one")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_color_value
+        with self.assertRaises(ValueError) as cm:
+            color.distance(bad_color_value)
+        err_msg = ("[DynamicColor.distance] `other_color` must be either an "
+                   "instance of DynamicColor or a color-like object that can "
+                   "be easily converted into one")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+    def test_invert(self):
+        # standard inversion
+        color = DynamicColor((0, 0, 0))
+        inverted = color.invert()
+        assert_equal_float(inverted.rgb, (1.0, 1.0, 1.0))
+
+        # in-place inversion
+        color.invert(in_place=True)
+        assert_equal_float(color.rgb, (1.0, 1.0, 1.0))
+
+    def test_parse_in_place(self):
+        hex_code_noalpha = "#00ff00"
+        hex_code_alpha = "#00ff0080"
+        hsv = (0, 1, 1)
+        name = "blue"
+        rgb = (1, 1, 0)
+        rgba = (0, 1, 1, 0.8)
+
+        color = DynamicColor("white")
+        color.parse(hex_code_noalpha)
+        self.assertEqual(color.hex_code, hex_code_noalpha + "ff")
+        color.parse(hex_code_alpha)
+        self.assertEqual(color.hex_code, hex_code_alpha)
+        color.parse(hsv, space="hsv")
+        assert_equal_float(color.hsv, hsv)
+        color.parse(name)
+        self.assertEqual(color.name, name)
+        color.parse(rgb)
+        assert_equal_float(color.rgb, rgb)
+        color.parse(rgba)
+        assert_equal_float(color.rgba, rgba)
+
+    def test_parse_in_place_errors(self):
+        bad_color_type = 12345
+        bad_color_value = "this is not a color-like"
+        bad_space_type = 42
+        bad_space_value = "this is an invalid color space"
+
+        # bad_color_type
+        color = DynamicColor("red")
+        with self.assertRaises(TypeError) as cm:
+            color.parse(bad_color_type)
+        err_msg = ("[DynamicColor.parse] `color_like` must be a string "
+                   "referencing a named color ('white') or hex code of the "
+                   "form '#rrggbb[aa]', or a tuple of numeric values between "
+                   "0 and 1, representing either an `(r, g, b)`, `(h, s, v)` "
+                   "or `(r, g, b, a)` color specification")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_color_value
+        with self.assertRaises(ValueError) as cm:
+            color.parse(bad_color_value)
+        err_msg = ("[DynamicColor.parse] `color_like` must be a string "
+                   "referencing a named color ('white') or hex code of the "
+                   "form '#rrggbb[aa]', or a tuple of numeric values between "
+                   "0 and 1, representing either an `(r, g, b)`, `(h, s, v)` "
+                   "or `(r, g, b, a)` color specification")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_space_type
+        with self.assertRaises(TypeError) as cm:
+            color.parse((0.5, 0.5, 0.5), space=bad_space_type)
+        err_msg = ("[DynamicColor.parse] `space` must be a string with one of "
+                   "the following values:")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_mode_value
+        with self.assertRaises(ValueError) as cm:
+            color.parse((0.5, 0.5, 0.5), space=bad_space_value)
+        err_msg = ("[DynamicColor.parse] `space` must be a string with one of "
+                   "the following values:")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+    def test_properties(self):
+        color = DynamicColor((1, 0, 0, 1))
+        expected = {
+            "alpha": 1.0,
+            "hex_code": "#ff0000ff",
+            "hsv": (0, 1.0, 1.0),
+            "name": "red",
+            "rgb": (1.0, 0.0, 0.0),
+            "rgba": (1.0, 0.0, 0.0, 1.0)
+        }
+        self.assertDictEqual(color.properties(), expected)
+
+    def test_equality(self):
+        color = DynamicColor((0, 1, 0))
+        self.assertEqual(color, DynamicColor((0, 1, 0)))
+        self.assertNotEqual(color, DynamicColor((1, 0, 0)))
+
+    def test_hash(self):
+        color1 = DynamicColor((0, 0, 1))
+        color2 = DynamicColor((0, 0, 1))
+        self.assertNotEqual(hash(color1), hash(color2))
+
+    def test_repr(self):
+        color = DynamicColor((1, 1, 0, 1))
+        self.assertEqual(repr(color), "DynamicColor((1, 1, 0, 1))")
+
+    def test_str(self):
+        color = DynamicColor("white")
+        self.assertEqual(str(color), "white")
+        color.hex_code = "#0587ef77"
+        self.assertEqual(str(color), "#0587ef77")

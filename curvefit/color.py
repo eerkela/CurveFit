@@ -21,10 +21,9 @@ color2 = color + (0.1, 0.1, 0.1)  # basic arithmetic for quick blends
 `
 """
 from __future__ import annotations
-from collections import defaultdict
 from math import sqrt
 from string import hexdigits
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import matplotlib as mpl
 
@@ -33,13 +32,32 @@ from curvefit.callback import callback_property
 
 
 NAMED_COLORS = {}
+COLORS_NAMED = {}
 for k, v in mpl.colors.get_named_colors_mapping().items():
     if isinstance(v, str):
-        NAMED_COLORS[k] = v.lower()
-COLORS_NAMED = defaultdict(list)
-for k, v in NAMED_COLORS.items():
-    COLORS_NAMED[v].append(k)
-COLORS_NAMED = dict(COLORS_NAMED)
+        v = v.lower()
+        NAMED_COLORS[k] = v
+        if v not in COLORS_NAMED:
+            COLORS_NAMED[v] = [k]
+        else:
+            COLORS_NAMED[v].append(k)
+
+
+BLEND_MODES = {
+    "add": lambda b, t: min(b + t, 1.0),
+    "subtract": lambda b, t: max(b - t, 0.0),
+    "difference": lambda b, t: abs(b - t),
+    "multiply": lambda b, t: b * t,
+    "divide": lambda b, t: min(b / t, 1.0) if t > 0 else 1.0,
+    "burn": lambda b, t: max(1 - (1 - b) / t, 0.0) if t > 0 else 0.0,
+    "dodge": lambda b, t: min(b / (1 - t), 1.0) if t < 1 else 1.0,
+    "screen": lambda b, t: 1 - (1 - b) * (1 - t),
+    "overlay": lambda b, t: 2*b*t if b < 0.5 else 1 - 2 * (1 - b) * (1 - t),
+    "hard light": lambda b, t: 2*b*t if t < 0.5 else 1 - 2 * (1 - b) * (1 - t),
+    "soft light": lambda b, t: (1 - 2 * t) * b**2 + 2 * t * b,
+    "darken": min,
+    "lighten": max
+}
 
 
 class DynamicColor:
@@ -52,9 +70,8 @@ class DynamicColor:
 
     def __init__(self,
                  color: Union[str, tuple[NUMERIC, ...]],
-                 color_spec: str = "rgb"):
-        self.color_spec = color_spec
-        self.parse(color)
+                 space: str = "rgb"):
+        self.parse(color, space=space)
 
     @callback_property
     def alpha(self) -> float:
@@ -94,40 +111,6 @@ class DynamicColor:
             raise ValueError(err_msg)
         self._alpha = new_alpha
         self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
-
-    @property
-    def color_spec(self) -> str:
-        """Getter for current color specification, which determines how tuple
-        color values are interpreted.  Allowed values are `{'rgb', 'hsv'}`.
-
-        :return: current color specification
-        :rtype: str
-        """
-        return self._color_spec
-
-    @color_spec.setter
-    def color_spec(self, new_color_spec: str) -> None:
-        """Setter for current color specification, which determines how tuple
-        color values are interpreted.  Allowed values are `{'rgb', 'hsv'}`.
-
-        :param new_color_spec: new color specification
-        :type new_color_spec: str
-        :raises TypeError: if `new_color_spec` isn't a string
-        :raises ValueError: if `new_color_spec` isn't in `{'rgb', 'hsv'}`
-        """
-        allowed_specs = {"rgb", "hsv"}
-        if not isinstance(new_color_spec, str):
-            err_msg = (f"[{error_trace(self)}] `color_spec` must be a "
-                        f"string with one of the following values: "
-                        f"{allowed_specs} (received object of type: "
-                        f"{type(new_color_spec)})")
-            raise TypeError(err_msg)
-        if new_color_spec not in allowed_specs:
-            err_msg = (f"[{error_trace(self)}] `color_spec` must be a "
-                        f"string with one of the following values: "
-                        f"{allowed_specs} (received: {repr(new_color_spec)})")
-            raise ValueError(err_msg)
-        self._color_spec = new_color_spec
 
     @callback_property
     def hex_code(self) -> str:
@@ -396,22 +379,74 @@ class DynamicColor:
 
     def blend(self,
               other_color: DynamicColor,
-              mode: str = "multiply",
+              mode: str = "overlay",
               in_place: bool = False,
-              keep_alpha: bool = True) -> DynamicColor:
+              space: str = "rgb") -> DynamicColor:
         """Blends one DynamicColor with another, treating the current color as
-        the 'top' layer for non-commutative operations.
+        the bottom layer for non-commutative operations.
+
+        The available blend modes and their related operations on the RGB
+        values of the bottom (b) and top (t) layers are as follows:
+            #. `'add'`: arithmetic addition.
+                :math:`f(b, t) = min(b + t, 1)`
+            #. `'subtract'`: arithmetic subtraction.
+                :math:`f(b, t) = max(b - t, 0)`
+            #. `'difference'`: absolute value of `'subtract'`.
+                :math:`f(b, t) = abs(b - t)`
+            #. `'multiply'`: arithmetic multiplication.
+                :math:`f(b, t) = b * t`
+            #. `'divide'`: arithmetic division.
+                :math:`f(b, t) = min(b / t, 1)`
+            #. `'burn'`: invert bottom layer, divide by top layer, and then
+                invert the result.  This tends to darken the top layer, causing
+                shadows to clip and changing the overall black point.  Blending
+                any color with black produces black, and blending with white
+                does not change the original image.
+                :math:`f(b, t) = max(1 - (1 - b) / t, 0)`
+            #. `'dodge'`: divide bottom layer by inverted top layer.  This
+                tends to lighten the bottom layer, causing highlights to clip
+                and changing the overall white point.  Blending any color with
+                white produces white, and blending with black does not change
+                the original image.
+                :math:`f(b, t) = min(b / (1 - t), 1)`
+            #. `'screen'`: invert both layers, multiply, and then invert again.
+                The result is the opposite of `'multiply'`.  Wherever either
+                layer is darker than white, the composite will be brighter.
+                :math:`f(b, t) = 1 - (1 - b) * (1 - t)`
+            #. `'overlay'`: combines `'multiply'` and `'screen'` blend modes.
+                If the top layer is darker than middle gray, multiply the
+                layers and scale by a factor of 2.  If it is lighter than
+                middle gray, invert both layers, multiply them, scale by a
+                factor of 2, and then invert again.  This has a tendency
+                to increase the contrast ratio.
+                :math:`f(b, t) = 2 * b * t` if :math:`b \\lt 0.5` else
+                :math:`f(b, t) = 1 - 2 * (1 - b) * (1 - t)`
+            #. `'hard light'`: also combines `'multiply'` and `'screen'`, but
+                in the opposite way as `'overlay'`.  Rather than comparing the
+                top layer to middle gray, this compares the bottom layer.
+                :math:`f(b, t) = 2 * b * t` if :math:`t \\lt 0.5` else
+                :math:`f(b, t) = 1 - 2 * (1 - b) * (1 - t)`
+            #. `'soft light'`: originally implemented in photoshop, this is
+                related to `'hard light'` in name only.  The implementation
+                used here is the 'pegtop' variation, which avoids local
+                contrast discontinuities.
+                :math:`f(b, t) = (1 - 2 * t) * b^2 + 2 * t * b`
+            #. `'darken'`: chooses the minimum value between layers.
+                :math:`f(b, t) = min(b, t)`
+            #. `'lighten'`: chooses the maximum value between layers.
+                :math:`f(b, t) = max(b, t)`
 
         :param other_color: another DynamicColor object to blend with
         :type other_color: DynamicColor
         :param mode: blend mode to use, defaults to "multiply"
         :type mode: str, optional
-        :param in_place: if `True`, replace the current DynamicColor in-place,
-            defaults to False
+        :param in_place: if `True`, replace the current DynamicColor values and
+            and return a reference to `self`, defaults to False
         :type in_place: bool, optional
-        :param keep_alpha: if `True`, preserve this color's alpha channel,
-            defaults to True
-        :type keep_alpha: bool, optional
+        :param space: determines the color space to use when receiving parsable
+            color-like objects.  If you want to use an HSV color rather than
+            RGB, set this to `'hsv'`.
+        :type space: str, optional
         :raises TypeError: if `other_color` isn't a DynamicColor and is of a
             type that cannot be coerced into one, or if `mode` isn't a string
         :raises ValueError: if `other_color` has values that prevent it from
@@ -423,75 +458,52 @@ class DynamicColor:
         """
         if not isinstance(other_color, DynamicColor):
             try:
-                other_color = DynamicColor(other_color)
+                other_color = DynamicColor(other_color, space=space)
             except (TypeError, ValueError) as exc:
                 err_msg = (f"[{error_trace(self)}] `other_color` must be "
                            f"either an instance of DynamicColor or a "
                            f"color-like object that can be easily converted "
                            f"into one (received: {repr(other_color)})")
                 raise type(exc)(err_msg) from exc
-        allowed_modes = {
-            "add": lambda a, b: min(a + b, 1.0),
-            "subtract": lambda a, b: max(a-b, 0.0),
-            "difference": lambda a, b: abs(a-b),
-            "multiply": lambda a, b: a*b,
-            "burn": lambda a, b: 1/min((1-b)/a, 1.0) if a > 0 else 1.0,
-            "divide": lambda a, b: min(a/b, 1.0) if b > 0 else 1.0,
-            "dodge": lambda a, b: min((1-a)/b, 1.0) if b > 0 else 1.0,
-            "screen": lambda a, b: 1-(1-a)*(1-b),
-            "overlay": lambda a, b: 2*a*b if a < 0.5 else 1-2*(1-a)*(1-b),
-            "hard light": lambda a, b: 2*a*b if b < 0.5 else 1-2*(1-a)*(1-b),
-            "soft light": lambda a, b: max(min((1-2*b)*a**2+2*b*a, 1.0), 0.0),
-            "darken": min,
-            "lighten": max
-        }
         if not isinstance(mode, str):
             err_msg = (f"[{error_trace(self)}] `mode` must be a string with "
                        f"one of the following values: "
-                       f"{list(allowed_modes.keys())} (received object of "
+                       f"{list(BLEND_MODES.keys())} (received object of "
                        f"type: {type(mode)})")
             raise TypeError(err_msg)
-        if mode not in allowed_modes:
+        if mode not in BLEND_MODES:
             err_msg = (f"[{error_trace(self)}] `mode` must be a string with "
                        f"one of the following values: "
-                       f"{list(allowed_modes.keys())} (received: "
+                       f"{list(BLEND_MODES.keys())} (received: "
                        f"{repr(mode)})")
             raise ValueError(err_msg)
+        new_rgb = tuple(map(BLEND_MODES[mode], self.rgb, other_color.rgb))
+        if in_place:
+            self.rgb = new_rgb
+            return self
+        return DynamicColor(new_rgb)
 
-        def do_blend(func: Callable) -> DynamicColor:
-            new_rgb = tuple(map(func, self.rgb, other_color.rgb))
-            if in_place:
-                self.rgb = new_rgb
-                if not keep_alpha:
-                    self.alpha = 1.0
-                return self
-            if keep_alpha:
-                return DynamicColor(new_rgb + (self.alpha,))
-            return DynamicColor(new_rgb)
-
-        return do_blend(allowed_modes[mode])
-
-    def difference(self,
+    def distance(self,
         other_color: DynamicColor,
-        weighted: bool = False) -> float:
+        weighted: bool = False,
+        space: str = "rgb") -> float:
         """Returns the Euclidean distance between the RGB values of two
-        DynamicColor objects, ignoring alpha channel values.
+        DynamicColor objects, ignoring relative alpha.
 
         If `weighted=True`, uses an approximation of human perception sometimes
-        called 'redmean', which more closely matches the subjective difference
-        between colors as they appear to the human eye.  The redmean distance
-        formula is as follows (using a color range of 0-255):
+        called 'redmean', which more closely matches the sensitivity of the
+        human eye.  The redmean distance formula is as follows (using a color
+        range of 0-255):
 
-        :math:`
-        \\begin{array}{l}
-            \\bar{r} = \\frac{R_1 + R_2}{2} &\\\\
+        .. math:
+
+            \\bar{r} = \\frac{R_1 + R_2}{2}
+
             \\Delta C = \\sqrt{
                 (2 + \\frac{\\bar{r}}{256}) \\times (R_1 - R_2)^2 +
                 4 \\times (G_1 - G_2)^2 +
                 (2 + \\frac{255 - \\bar{r}}{256}) \\times (B_1 - B_2)^2
-            } &\\\\
-        \\end{array}
-        `
+            }
 
         :param other_color: DynamicColor object to measure the distance to, or
             an object which can be easily coerced into one (e.g. `'white'`,
@@ -500,6 +512,10 @@ class DynamicColor:
         :param weighted: if `True`, use redmean weighted distance measure,
             defaults to False
         :type weighted: bool, optional
+        :param space: determines the color space to use when receiving parsable
+            color-like objects.  If you want to use an HSV color rather than
+            RGB, set this to `'hsv'`.
+        :type space: str, optional
         :raises TypeError: if `other_color` is of a type that can't be
             interpreted as a DynamicColor
         :raises ValueError: if `other_color` has values can't be coerced into
@@ -510,7 +526,7 @@ class DynamicColor:
         """
         if not isinstance(other_color, DynamicColor):
             try:
-                other_color = DynamicColor(other_color)
+                other_color = DynamicColor(other_color, space=space)
             except TypeError as exc:
                 err_msg = (f"[{error_trace(self)}] `other_color` must be "
                            f"either an instance of DynamicColor or a "
@@ -532,18 +548,13 @@ class DynamicColor:
             return sqrt(sum([v1*v2 for v1, v2 in zip(factors, squares)]))
         return sqrt(sum(squares))
 
-    def invert(self,
-               in_place: bool = False,
-               keep_alpha: bool = True) -> DynamicColor:
+    def invert(self, in_place: bool = False) -> DynamicColor:
         """Inverts the current DynamicColor's RGB values, returning a new
         DynamicColor object.
 
-        :param in_place: if `True`, replace the current DynamicColor in-place,
-            defaults to False
+        :param in_place: if `True`, replace the current DynamicColor values and
+            return a reference to `self`, defaults to False
         :type in_place: bool, optional
-        :param keep_alpha: if `True`, preserve this color's alpha channel,
-            defaults to True
-        :type keep_alpha: bool, optional
         :return: A DynamicColor representing the product of the color inversion.
             If `in_place=True`, this is a reference to `self`.
         :rtype: DynamicColor
@@ -551,16 +562,13 @@ class DynamicColor:
         new_rgb = tuple(map(lambda v: 1 - v, self.rgb))
         if in_place:
             self.rgb = new_rgb
-            if not keep_alpha:
-                self.alpha = 1.0
             return self
-        if keep_alpha:
-            return DynamicColor(new_rgb + (self.alpha,))
         return DynamicColor(new_rgb)
 
     def parse(
         self,
-        colorlike: Union[str, tuple[NUMERIC, ...], DynamicColor]) -> None:
+        color_like: Union[str, tuple[NUMERIC, ...], DynamicColor],
+        space: str = "rgb") -> None:
         """Parses a color-like object, setting the current color to match.
 
         A color-like object can be any of:
@@ -583,29 +591,41 @@ class DynamicColor:
         :raises ValueError: if `colorlike` has values that can't be coerced
             into a DynamicColor
         """
-        if not isinstance(colorlike, (str, tuple, DynamicColor)):
-            err_msg = (f"[{error_trace(self)}] `color` must be a string "
+        allowed_spaces = {"rgb", "hsv"}
+        if not isinstance(space, str):
+            err_msg = (f"[{error_trace(self)}] `space` must be a string with "
+                       f"one of the following values: {allowed_spaces} "
+                       f"(received object of type: {type(space)})")
+            raise TypeError(err_msg)
+        if space not in allowed_spaces:
+            err_msg = (f"[{error_trace(self)}] `space` must be a string with "
+                       f"one of the following values: {allowed_spaces} "
+                       f"(received: {repr(space)})")
+            raise ValueError(err_msg)
+        try:
+            if isinstance(color_like, DynamicColor):
+                self.rgba = color_like.rgba
+            elif isinstance(color_like, str):
+                if color_like in NAMED_COLORS:
+                    self.name = color_like
+                else:
+                    self.hex_code = color_like
+            else:
+                if space == "rgb":
+                    if len(color_like) == 3:
+                        self.rgb = color_like
+                    else:
+                        self.rgba = color_like
+                else:
+                    self.hsv = color_like
+        except (TypeError, ValueError) as exc:
+            err_msg = (f"[{error_trace(self)}] `color_like` must be a string "
                        f"referencing a named color ('white') or hex code of "
                        f"the form '#rrggbb[aa]', or a tuple of numeric values "
                        f"between 0 and 1, representing either an `(r, g, b)`, "
                        f"`(h, s, v)` or `(r, g, b, a)` color specification"
-                       f"(received object of type: {type(colorlike)})")
-            raise TypeError(err_msg)
-        if isinstance(colorlike, tuple):
-            if self.color_spec == "rgb":
-                if len(colorlike) == 3:
-                    self.rgb = colorlike
-                else:
-                    self.rgba = colorlike
-            else:
-                self.hsv = colorlike
-        elif isinstance(colorlike, str):
-            if colorlike in NAMED_COLORS:
-                self.name = colorlike
-            else:
-                self.hex_code = colorlike
-        else:  # colorlike is DynamicColor
-            self.rgba = colorlike.rgba
+                       f"(received object of type: {type(color_like)})")
+            raise type(exc)(err_msg) from exc
 
     def properties(self) -> dict[str, Union[str, tuple[float, ...]]]:
         """Returns a property dictionary that lists all the mutable attributes
@@ -617,7 +637,6 @@ class DynamicColor:
         """
         prop_dict = {
             "alpha": self.alpha,
-            "color_spec": self.color_spec,
             "hex_code": self.hex_code,
             "hsv": self.hsv,
             "name": self.name,
@@ -647,7 +666,7 @@ class DynamicColor:
         :return: `True` if the distance between colors is 0
         :rtype: bool
         """
-        return self.difference(other_color) == 0.0
+        return self.distance(other_color) == 0.0
 
     def __hash__(self) -> int:
         return hash(id(self))
@@ -669,7 +688,7 @@ class DynamicColor:
         return self.blend(other_color, mode="multiply")
 
     def __repr__(self) -> str:
-        return f"DynamicText({self.rgba})"
+        return f"DynamicColor({self.rgba})"
 
     def __str__(self) -> str:
         if self.name is not None:

@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Union
 
 import matplotlib as mpl
 
@@ -13,20 +12,18 @@ TODO: Implement Sphinx documentation
 """
 
 
-def available_fonts() -> set[str]:
+SYSTEM_FONTS = set()
+for fpath in mpl.font_manager.findSystemFonts():
     # matplotlib.font_manager.findSystemFonts() is a bit greedy and often
     # returns fonts that cannot actually be used by
     # matplotlib.text.Text.set_fontfamily()
-    available = set()
-    for fpath in mpl.font_manager.findSystemFonts():
-        try:
-            font_family = mpl.font_manager.get_font(fpath).family_name
-            font_prop = mpl.font_manager.FontProperties(font_family)
-            mpl.font_manager.findfont(font_prop, fallback_to_default=False)
-            available.add(font_family)
-        except ValueError:
-            continue
-    return available
+    try:
+        font_family = mpl.font_manager.get_font(fpath).family_name
+        font_prop = mpl.font_manager.FontProperties(font_family)
+        mpl.font_manager.findfont(font_prop, fallback_to_default=False)
+        SYSTEM_FONTS.add(font_family)
+    except ValueError:
+        continue
 
 
 class DynamicText:
@@ -49,13 +46,13 @@ class DynamicText:
             setattr(self, k, v)
 
     @callback_property
-    def alignment(self) -> str:
+    def alignment(self) -> tuple[str]:
         horizontal = self.obj.get_horizontalalignment()
         vertical = self.obj.get_verticalalignment()
         return (horizontal, vertical)
 
     @alignment.setter
-    def alignment(self, new_alignment: Union[str, tuple[str, str]]) -> None:
+    def alignment(self, new_alignment: str | tuple[str, str]) -> None:
         allowed_horizontal = {"center", "right", "left"}
         allowed_vertical = {"center", "top", "bottom", "baseline",
                             "center_baseline"}
@@ -112,7 +109,7 @@ class DynamicText:
     @color.setter
     def color(
         self,
-        new_color: Union[str, tuple[NUMERIC, ...], DynamicColor]) -> None:
+        new_color: str | tuple[NUMERIC, ...] | DynamicColor) -> None:
         self._color.parse(new_color)
 
     @callback_property
@@ -121,16 +118,15 @@ class DynamicText:
 
     @font.setter
     def font(self, new_font: str) -> None:
-        allowed = available_fonts()
         if not isinstance(new_font, str):
-            allowed_msg = "\n".join(sorted(allowed))
+            allowed_msg = "\n".join(sorted(SYSTEM_FONTS))
             err_msg = (f"[{error_trace(self)}] `font` must be a string "
                        f"referencing one of the available system fonts: "
                        f"{allowed_msg}\n(received object of type: "
                        f"{type(new_font)})")
             raise TypeError(err_msg)
-        if new_font not in allowed:
-            allowed_msg = "\n".join(sorted(allowed))
+        if new_font not in SYSTEM_FONTS:
+            allowed_msg = "\n".join(sorted(SYSTEM_FONTS))
             err_msg = (f"[{error_trace(self)}] `font` must be a string "
                        f"referencing one of the available system fonts: "
                        f"{allowed_msg}\n(received: {repr(new_font)})")
@@ -272,7 +268,7 @@ class DynamicText:
         self.obj.get_figure().tight_layout()
 
     def properties(
-        self) -> dict[str, Union[str, NUMERIC, bool, tuple[NUMERIC, ...]]]:
+        self) -> dict[str, str | NUMERIC | bool | tuple[NUMERIC, ...]]:
         prop_dict = {
             "alignment": self.alignment,
             "alpha": self.alpha,
@@ -291,6 +287,14 @@ class DynamicText:
 
     def update_color(self, color: DynamicColor) -> None:
         self.obj.set_color(color.rgba)
+
+    def __eq__(self, other_text: str | DynamicText) -> bool:
+        if isinstance(other_text, DynamicText):
+            return self.text == other_text.text
+        return self.text == other_text
+
+    def __hash__(self) -> int:
+        return hash(id(self))
 
     def __repr__(self) -> str:
         props = [f"{k}={repr(v)}" for k, v in self.properties().items()]

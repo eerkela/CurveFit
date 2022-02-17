@@ -76,37 +76,27 @@ class DynamicColorBasicTests(unittest.TestCase):
 
         # bad_color_type
         color = DynamicColor("red")
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.parse(bad_color_type)
-        err_msg = ("[DynamicColor.parse] `color_like` must be a string "
-                   "referencing a named color ('white') or hex code of the "
-                   "form '#rrggbb[aa]', or a tuple of numeric values between "
-                   "0 and 1, representing either an `(r, g, b)`, `(h, s, v)` "
-                   "or `(r, g, b, a)` color specification")
+        err_msg = ("[DynamicColor.parse] could not parse color")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
 
         # bad_color_value
         with self.assertRaises(ValueError) as cm:
             color.parse(bad_color_value)
-        err_msg = ("[DynamicColor.parse] `color_like` must be a string "
-                   "referencing a named color ('white') or hex code of the "
-                   "form '#rrggbb[aa]', or a tuple of numeric values between "
-                   "0 and 1, representing either an `(r, g, b)`, `(h, s, v)` "
-                   "or `(r, g, b, a)` color specification")
+        err_msg = ("[DynamicColor.parse] could not parse color")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
 
         # bad_space_type
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.parse((0.5, 0.5, 0.5), space=bad_space_type)
-        err_msg = ("[DynamicColor.parse] `space` must be a string with one of "
-                   "the following values:")
+        err_msg = ("[DynamicColor.parse] could not parse color")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
 
         # bad_mode_value
         with self.assertRaises(ValueError) as cm:
             color.parse((0.5, 0.5, 0.5), space=bad_space_value)
-        err_msg = ("[DynamicColor.parse] `space` must be a string with one of "
-                   "the following values:")
+        err_msg = ("[DynamicColor.parse] could not parse color")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
 
     def test_properties(self):
@@ -391,9 +381,9 @@ class DynamicColorSweepTests(unittest.TestCase):
     def test_hue_sweep(self):
         starting_color = (0.0, 1.0, 1.0)
         color = DynamicColor(starting_color, space="hsv")
-        for test_hue in np.linspace(0, 1 - 1/256, num=255):
+        for test_hue in np.linspace(0, 1, num=256):
             # get expected values:
-            expected_hsv = (test_hue,) + starting_color[1:]
+            expected_hsv = (test_hue % 1,) + starting_color[1:]
             expected_rgb = tuple(mpl.colors.hsv_to_rgb(expected_hsv))
             expected_hex = mpl.colors.to_hex(expected_rgb, keep_alpha=True)
 
@@ -497,7 +487,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor("black")
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.alpha = bad_type
         err_msg = ("[DynamicColor.alpha] `alpha` must be a numeric between 0 "
                    "and 1")
@@ -525,7 +515,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor("#000000")
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.hex_code = bad_type
         err_msg = ("[DynamicColor.hex_code] `hex_code` must be a string of the "
                    "form '#rrggbb' or '#rrggbbaa'")
@@ -561,7 +551,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor((0, 0, 0), space="hsv")
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.hsv = bad_type
         err_msg = ("[DynamicColor.hsv] `hsv` must be a length-3 tuple of "
                    "numerics between 0 and 1")
@@ -601,7 +591,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor("black")
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.name = bad_type
         err_msg = ("[DynamicColor.name] `name` must be a string referencing a "
                    "key in `NAMED_COLORS`")
@@ -623,7 +613,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor((0, 0, 0))
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.rgb = bad_type
         err_msg = ("[DynamicColor.rgb] `rgb` must be a length-3 tuple of "
                    "numerics between 0 and 1")
@@ -666,7 +656,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor((0, 0, 0, 1.0))
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.rgba = bad_type
         err_msg = ("[DynamicColor.rgba] `rgba` must be a length-4 tuple of "
                    "numerics between 0 and 1")
@@ -924,23 +914,19 @@ class DynamicColorBlendTests(unittest.TestCase):
 
         # bad_color_type
         color = DynamicColor("red")
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.blend(bad_color_type, mode="multiply")
-        err_msg = ("[DynamicColor.blend] `other_color` must be either an "
-                   "instance of DynamicColor or a color-like object that can "
-                   "be easily converted into one")
+        err_msg = ("[DynamicColor.blend] could not blend colors")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
 
         # bad_color_value
         with self.assertRaises(ValueError) as cm:
             color.blend(bad_color_value, mode="multiply")
-        err_msg = ("[DynamicColor.blend] `other_color` must be either an "
-                   "instance of DynamicColor or a color-like object that can "
-                   "be easily converted into one")
+        err_msg = ("[DynamicColor.blend] could not blend colors")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
 
         # bad_mode_type
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.blend((0.5, 0.5, 0.5), mode=bad_mode_type)
         err_msg = ("[DynamicColor.blend] `mode` must be a string with one of "
                    "the following values:")
@@ -972,19 +958,15 @@ class DynamicColorDistanceTests(unittest.TestCase):
 
         # bad_color_type
         color = DynamicColor("red")
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(ValueError) as cm:
             color.distance(bad_color_type)
-        err_msg = ("[DynamicColor.distance] `other_color` must be either an "
-                   "instance of DynamicColor or a color-like object that can "
-                   "be easily converted into one")
+        err_msg = ("[DynamicColor.distance] could not compute distance")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
 
         # bad_color_value
         with self.assertRaises(ValueError) as cm:
             color.distance(bad_color_value)
-        err_msg = ("[DynamicColor.distance] `other_color` must be either an "
-                   "instance of DynamicColor or a color-like object that can "
-                   "be easily converted into one")
+        err_msg = ("[DynamicColor.distance] could not compute distance")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
 
 

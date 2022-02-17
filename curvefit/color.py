@@ -22,10 +22,10 @@ color2 = color + (0.1, 0.1, 0.1)  # basic arithmetic for quick blends
 """
 from __future__ import annotations
 from functools import lru_cache
-from math import sqrt
 from string import hexdigits
 
 import matplotlib as mpl
+from numpy import sqrt, isclose
 
 from curvefit import error_trace, NUMERIC, NUMERIC_TYPECHECK
 from curvefit.callback import callback_property
@@ -62,6 +62,78 @@ BLEND_MODES = {
     "darken": min,
     "lighten": max
 }
+
+
+def to_rgba(
+    color_like: str | tuple[NUMERIC, ...] | DynamicColor,
+    space: str = "rgb") -> tuple[float, float, float]:
+    """Converts a color-like object to a tuple of RGBA values.
+    
+    A color-like object can be any of:
+        #. a previously existing DynamicColor object
+        #. a named color string (e.g. `'white'`)
+        #. a hex code with or without an alpha channel (e.g. `'#rrggbb'`
+            or `'#rrggbbaa'`)
+        #. a length-3 tuple containing HSV values with `color_spec='hsv'`
+            (e.g. `(0.1, 0.2, 0.3)`)
+        #. a length-3 tuple containing RGB values with `color_spec='rgb'`
+            (e.g. `(1, 0, 0)`)
+        #. a length-4 tuple containing RGBA values with `color_spec='rgb'`
+            (e.g. `(1, 0, 0, 1)`)
+
+    `space` can have values `{'rgb', 'hsv'}`
+
+    :param colorlike: a DynamicColor or color-like string or tuple of
+        `NUMERICS` that can be coerced into a DynamicColor object
+    :type colorlike: str | tuple[NUMERIC, ...] | DynamicColor
+    :param space: the color space to use when interpreting ambiguous tuples,
+        defaults to "rgb"
+    :type space: str, optional
+    :raises ValueError: if `color_like` can't be coerced into an RGB tuple
+    :raises ValueError: if `space` isn't a string or doesn't have one of the
+        allowed values
+    :return: a tuple of RGBA values, normalized to `[0, 1]`
+    :rtype: tuple[float, float, float]
+    """
+    allowed_spaces = {"rgb", "hsv"}
+    if not isinstance(space, str) or space not in allowed_spaces:
+        err_msg = (f"[{error_trace()}] `space` must be a string with one of "
+                   f"the following values: {allowed_spaces} (received: "
+                   f"{repr(space)})")
+        raise ValueError(err_msg)
+    
+    if isinstance(color_like, DynamicColor):
+        return color_like.rgba
+    
+    if isinstance(color_like, str):
+        if color_like in NAMED_COLORS:
+            return hex_to_rgba(NAMED_COLORS[color_like])
+        if (color_like[0] == "#" and
+            all(c in hexdigits for c in color_like[1:])):
+            if len(color_like) == 7:
+                return hex_to_rgba(color_like, alpha=1.0)
+            if len(color_like) == 9:
+                return hex_to_rgba(color_like)
+    
+    if isinstance(color_like, tuple):
+        if (all(isinstance(v, NUMERIC_TYPECHECK) for v in color_like) and
+                all(0 <= v <= 1 for v in color_like)):
+            if space == "rgb":
+                if len(color_like) == 3:
+                    return color_like + (1.,)
+                if len(color_like) == 4:
+                    return color_like
+            else:
+                if len(color_like) == 3:
+                    return hsv_to_rgb(color_like) + (1.,)
+    
+    err_msg = (f"[{error_trace()}] `color_like` must be a string referencing "
+               f"a named color ('white') or hex code of the form "
+               f"'#rrggbb[aa]', or a tuple of numeric values between 0 and 1, "
+               f"representing either an `(r, g, b)`, `(h, s, v)` or "
+               f"`(r, g, b, a)` color specification (received: "
+               f"{repr(color_like)})")
+    raise ValueError(err_msg)
 
 
 @lru_cache(maxsize=128)
@@ -131,15 +203,11 @@ class DynamicColor:
 
         :param new_alpha: new alpha channel value, normalized to `[0, 1]`
         :type new_alpha: NUMERIC
-        :raises TypeError: if `new_alpha` is not `NUMERIC`
-        :raises ValueError: if `new_alpha` is not in the range `[0, 1]`
+        :raises ValueError: if `new_alpha` is not `NUMERIC` or not in the range
+            `[0, 1]`
         """
-        if not isinstance(new_alpha, NUMERIC_TYPECHECK):
-            err_msg = (f"[{error_trace(self)}] `alpha` must be a numeric "
-                       f"between 0 and 1 (received object of type: "
-                       f"{type(new_alpha)})")
-            raise TypeError(err_msg)
-        if not 0 <= new_alpha <= 1:
+        if (not isinstance(new_alpha, NUMERIC_TYPECHECK) or
+            not 0 <= new_alpha <= 1):
             err_msg = (f"[{error_trace(self)}] `alpha` must be a numeric "
                        f"between 0 and 1 (received: {repr(new_alpha)})")
             raise ValueError(err_msg)
@@ -174,20 +242,16 @@ class DynamicColor:
         :param new_hex: new hexadecimal color code, in the form `'#rrggbb'` or
             `'#rrggbbaa'`
         :type new_hex: str
-        :raises TypeError: if `new_hex` isn't a string
-        :raises ValueError: if `new_hex` isn't a valid hex code
+        :raises ValueError: if `new_hex` isn't a string or isn't a valid hex
+            code
         """
-        if not isinstance(new_hex, str):
-            err_msg = (f"[{error_trace(self)}] `hex_code` must be a string "
-                       f"of the form '#rrggbb' or '#rrggbbaa' (received "
-                       f"object of type: {type(new_hex)})")
-            raise TypeError(err_msg)
-        if ((len(new_hex) != 7 and len(new_hex) != 9) or
+        if (not isinstance(new_hex, str) or
+            (len(new_hex) != 7 and len(new_hex) != 9) or
             new_hex[0] != "#" or
             any(c not in hexdigits for c in new_hex[1:])):
             err_msg = (f"[{error_trace(self)}] `hex_code` must be a string "
                        f"of the form '#rrggbb' or '#rrggbbaa' (received: "
-                       f"{new_hex})")
+                       f"{repr(new_hex)})")
             raise ValueError(err_msg)
         if hasattr(self, "_rgba") and len(new_hex) == 7:
             self._rgba = hex_to_rgba(new_hex, alpha=self._rgba[-1])
@@ -222,20 +286,16 @@ class DynamicColor:
 
         :param new_hsv: the new HSV color values
         :type new_hsv: tuple[NUMERIC, NUMERIC, NUMERIC]
-        :raises TypeError: if `new_hsv` isn't a tuple
-        :raises ValueError: if `new_hsv` isn't length-3, or doesn't contain
-            `NUMERIC`s in the range `[0, 1]`
+        :raises ValueError: if `new_hsv` isn't a tuple, is not length-3, or
+            doesn't contain `NUMERIC`s in the range `[0, 1]`
         """
-        if not isinstance(new_hsv, tuple):
-            err_msg = (f"[{error_trace(self)}] `hsv` must be a length-3 tuple "
-                       f"of numerics between 0 and 1 (received object of "
-                       f"type: {type(new_hsv)})")
-            raise TypeError(err_msg)
-        if (len(new_hsv) != 3 or
+        if (not isinstance(new_hsv, tuple) or
+            len(new_hsv) != 3 or
             any(not isinstance(v, NUMERIC_TYPECHECK) for v in new_hsv) or
             any(not 0 <= v <= 1 for v in new_hsv)):
             err_msg = (f"[{error_trace(self)}] `hsv` must be a length-3 tuple "
-                       f"of numerics between 0 and 1 (received: {new_hsv})")
+                       f"of numerics between 0 and 1 (received: "
+                       f"{repr(new_hsv)})")
             raise ValueError(err_msg)
         if hasattr(self, "_rgba"):
             self._rgba = hsv_to_rgb(new_hsv) + (self._rgba[-1],)
@@ -270,16 +330,11 @@ class DynamicColor:
 
         :param new_color: the name of a recognized matplotlib color
         :type new_color: str
-        :raises TypeError: if `new_color` isn't a string
-        :raises ValueError: if `new_color` isn't recognized as a named color
+        :raises ValueError: if `new_color` isn't a string, or isn't recognized
+            as a named color
         """
-        if not isinstance(new_color, str):
-            err_msg = (f"[{error_trace(self)}] `name` must be a string "
-                       f"referencing a key in `NAMED_COLORS` (received object "
-                       f"of type: {type(new_color)})")
-            raise TypeError(err_msg)
         hex_code = NAMED_COLORS.get(new_color, None)
-        if not hex_code:
+        if not isinstance(new_color, str) or not hex_code:
             err_msg = (f"[{error_trace(self)}] `name` must be a string "
                        f"referencing a key in `NAMED_COLORS` (received: "
                        f"{repr(new_color)})")
@@ -317,20 +372,16 @@ class DynamicColor:
 
         :param new_rgb: a tuple of new RGB values to use for the current color
         :type new_rgb: tuple[NUMERIC, NUMERIC, NUMERIC]
-        :raises TypeError: if `new_rgb` isn't a tuple
-        :raises ValueError: if `new_rgb` isn't length-3, or doesn't contain
-            `NUMERIC`s in the range `[0, 1]`
+        :raises ValueError: if `new_rgb` isn't a tuple, is not length-3, or
+            doesn't contain `NUMERIC`s in the range `[0, 1]`
         """
-        if not isinstance(new_rgb, tuple):
-            err_msg = (f"[{error_trace(self)}] `rgb` must be a length-3 tuple "
-                       f"of numerics between 0 and 1 (received object of "
-                       f"type: {type(new_rgb)})")
-            raise TypeError(err_msg)
-        if (len(new_rgb) != 3 or
+        if (not isinstance(new_rgb, tuple) or
+            len(new_rgb) != 3 or
             any(not isinstance(v, NUMERIC_TYPECHECK) for v in new_rgb) or
             any(not 0 <= v <= 1 for v in new_rgb)):
             err_msg = (f"[{error_trace(self)}] `rgb` must be a length-3 tuple "
-                       f"of numerics between 0 and 1 (received: {new_rgb})")
+                       f"of numerics between 0 and 1 (received: "
+                       f"{repr(new_rgb)})")
             raise ValueError(err_msg)
         if hasattr(self, "_rgba"):
             self._rgba = new_rgb + (self._rgba[-1],)
@@ -366,16 +417,11 @@ class DynamicColor:
 
         :param new_rgba: a tuple of new RGBA values to use for the current color
         :type new_rgba: tuple[NUMERIC, NUMERIC, NUMERIC, NUMERIC]
-        :raises TypeError: if `new_rgba` isn't a tuple
-        :raises ValueError: if `new_rgba` isn't length-4, or doesn't contain
-            `NUMERIC`s in the range `[0, 1]`
+        :raises ValueError: if `new_rgba` isn't a tuple, is not length-4, or
+            doesn't contain `NUMERIC`s in the range `[0, 1]`
         """
-        if not isinstance(new_rgba, tuple):
-            err_msg = (f"[{error_trace(self)}] `rgba` must be a length-4 "
-                       f"tuple of numerics between 0 and 1 (received object "
-                       f"of type: {type(new_rgba)})")
-            raise TypeError(err_msg)
-        if (len(new_rgba) != 4 or
+        if (not isinstance(new_rgba, tuple) or
+            len(new_rgba) != 4 or
             any(not isinstance(v, NUMERIC_TYPECHECK) for v in new_rgba) or
             any(not 0 <= v <= 1 for v in new_rgba)):
             err_msg = (f"[{error_trace(self)}] `rgba` must be a length-4 "
@@ -385,7 +431,7 @@ class DynamicColor:
         self._rgba = new_rgba
 
     def blend(self,
-              other_color: str | tuple[NUMERIC, ...] | DynamicColor,
+              color_like: str | tuple[NUMERIC, ...] | DynamicColor,
               mode: str = "overlay",
               in_place: bool = False,
               space: str = "rgb") -> DynamicColor:
@@ -443,8 +489,8 @@ class DynamicColor:
             #. `'lighten'`: chooses the maximum value between layers.
                 :math:`f(b, t) = max(b, t)`
 
-        :param other_color: another DynamicColor object to blend with
-        :type other_color: DynamicColor
+        :param color_like: another DynamicColor object to blend with
+        :type color_like: DynamicColor
         :param mode: blend mode to use, defaults to "multiply"
         :type mode: str, optional
         :param in_place: if `True`, replace the current DynamicColor values and
@@ -454,44 +500,31 @@ class DynamicColor:
             color-like objects.  If you want to use an HSV color rather than
             RGB, set this to `'hsv'`.
         :type space: str, optional
-        :raises TypeError: if `other_color` isn't a DynamicColor and is of a
-            type that cannot be coerced into one, or if `mode` isn't a string
-        :raises ValueError: if `other_color` has values that prevent it from
-            being coerced into a DynamicColor object, or if `mode` isn't one
-            of the allowed values
+        :raises ValueError: if `color_like` can't be coerced into an RGB tuple,
+            or if `mode` isn't one of the allowed values
         :return: A DynamicColor representing the product of the blend operation.
             If `in_place=True`, this is a reference to `self`.
         :rtype: DynamicColor
         """
-        if not isinstance(other_color, DynamicColor):
-            try:
-                other_color = DynamicColor(other_color, space=space)
-            except (TypeError, ValueError) as exc:
-                err_msg = (f"[{error_trace(self)}] `other_color` must be "
-                           f"either an instance of DynamicColor or a "
-                           f"color-like object that can be easily converted "
-                           f"into one (received: {repr(other_color)})")
-                raise type(exc)(err_msg) from exc
-        if not isinstance(mode, str):
-            err_msg = (f"[{error_trace(self)}] `mode` must be a string with "
-                       f"one of the following values: "
-                       f"{list(BLEND_MODES.keys())} (received object of "
-                       f"type: {type(mode)})")
-            raise TypeError(err_msg)
-        if mode not in BLEND_MODES:
+        if not isinstance(mode, str) or mode not in BLEND_MODES:
             err_msg = (f"[{error_trace(self)}] `mode` must be a string with "
                        f"one of the following values: "
                        f"{list(BLEND_MODES.keys())} (received: "
                        f"{repr(mode)})")
             raise ValueError(err_msg)
-        new_rgb = tuple(map(BLEND_MODES[mode], self.rgb, other_color.rgb))
+        try:
+            other_rgb = to_rgba(color_like, space=space)[0:3]
+        except ValueError as exc:
+            err_msg = f"[{error_trace(self)}] could not blend colors"
+            raise ValueError(err_msg) from exc
+        new_rgb = tuple(map(BLEND_MODES[mode], self.rgb, other_rgb))
         if in_place:
             self.rgb = new_rgb
             return self
         return DynamicColor(new_rgb)
 
     def distance(self,
-        other_color: str | tuple[NUMERIC, ...] | DynamicColor,
+        color_like: str | tuple[NUMERIC, ...] | DynamicColor,
         weighted: bool = False,
         space: str = "rgb") -> float:
         """Returns the Euclidean distance between the RGB values of two
@@ -512,10 +545,10 @@ class DynamicColor:
                 (2 + \\frac{255 - \\bar{r}}{256}) \\times (B_1 - B_2)^2
             }
 
-        :param other_color: DynamicColor object to measure the distance to, or
+        :param color_like: DynamicColor object to measure the distance to, or
             an object which can be easily coerced into one (e.g. `'white'`,
             `(1, 1, 1)`, or `'#ffffffff'`)
-        :type other_color: DynamicColor
+        :type color_like: DynamicColor
         :param weighted: if `True`, use redmean weighted distance measure,
             defaults to False
         :type weighted: bool, optional
@@ -523,33 +556,19 @@ class DynamicColor:
             color-like objects.  If you want to use an HSV color rather than
             RGB, set this to `'hsv'`.
         :type space: str, optional
-        :raises TypeError: if `other_color` is of a type that can't be
-            interpreted as a DynamicColor
-        :raises ValueError: if `other_color` has values can't be coerced into
-            a DynamicColor object
+        :raises ValueError: if `color_like` can't be coerced into an RGB tuple
         :return: float representing the distance between the DynamicColor
             objects
         :rtype: float
         """
-        if not isinstance(other_color, DynamicColor):
-            try:
-                other_color = DynamicColor(other_color, space=space)
-            except TypeError as exc:
-                err_msg = (f"[{error_trace(self)}] `other_color` must be "
-                           f"either an instance of DynamicColor or a "
-                           f"color-like object that can be easily converted "
-                           f"into one (received object of type: "
-                           f"{type(other_color)})")
-                raise TypeError(err_msg) from exc
-            except ValueError as exc:
-                err_msg = (f"[{error_trace(self)}] `other_color` must be "
-                           f"either an instance of DynamicColor or a "
-                           f"color-like object that can be easily converted "
-                           f"into one (received: {repr(other_color)})")
-                raise ValueError(err_msg) from exc
-        squares = [(v1-v2)**2 for v1, v2 in zip(self.rgb, other_color.rgb)]
+        try:
+            other_rgb = to_rgba(color_like, space=space)[0:3]
+        except ValueError as exc:
+            err_msg = f"[{error_trace(self)}] could not compute distance"
+            raise ValueError(err_msg) from exc
+        squares = [(v1-v2)**2 for v1, v2 in zip(self.rgb, other_rgb)]
         if weighted:
-            redmean = (self.rgb[0] + other_color.rgb[0]) / 2
+            redmean = (self.rgb[0] + other_rgb[0]) / 2
             denom = 1 + 1/255
             factors = [2 + redmean/denom, 4, 2 + (1 - redmean)/denom]
             return sqrt(sum([v1*v2 for v1, v2 in zip(factors, squares)]))
@@ -576,63 +595,12 @@ class DynamicColor:
         self,
         color_like: str | tuple[NUMERIC, ...] | DynamicColor,
         space: str = "rgb") -> None:
-        """Parses a color-like object, setting the current color to match.
-
-        A color-like object can be any of:
-        #. a previously existing DynamicColor object
-        #. a named color string (e.g. `'white'`)
-        #. a hex code with or without an alpha channel (e.g. `'#rrggbb'`
-            or `'#rrggbbaa'`)
-        #. a length-3 tuple containing HSV values with `color_spec='hsv'`
-            (e.g. `(0.1, 0.2, 0.3)`)
-        #. a length-3 tuple containing RGB values with `color_spec='rgb'`
-            (e.g. `(1, 0, 0)`)
-        #. a length-4 tuple containing RGBA values with `color_spec='rgb'`
-            (e.g. `(1, 0, 0, 1)`)
-
-        :param colorlike: a DynamicColor or color-like string or tuple of
-            `NUMERICS` that can be coerced into a DynamicColor object
-        :type colorlike: str | tuple[NUMERIC, ...] | DynamicColor
-        :raises TypeError: if `colorlike` is of a type that can't be
-            interpreted as a DynamicColor
-        :raises ValueError: if `colorlike` has values that can't be coerced
-            into a DynamicColor
-        """
-        allowed_spaces = {"rgb", "hsv"}
-        if not isinstance(space, str):
-            err_msg = (f"[{error_trace(self)}] `space` must be a string with "
-                       f"one of the following values: {allowed_spaces} "
-                       f"(received object of type: {type(space)})")
-            raise TypeError(err_msg)
-        if space not in allowed_spaces:
-            err_msg = (f"[{error_trace(self)}] `space` must be a string with "
-                       f"one of the following values: {allowed_spaces} "
-                       f"(received: {repr(space)})")
-            raise ValueError(err_msg)
+        """Parses a color-like object, setting the current color to match."""
         try:
-            if isinstance(color_like, DynamicColor):
-                self.rgba = color_like.rgba
-            elif isinstance(color_like, str):
-                if color_like in NAMED_COLORS:
-                    self.name = color_like
-                else:
-                    self.hex_code = color_like
-            else:
-                if space == "rgb":
-                    if len(color_like) == 3:
-                        self.rgb = color_like
-                    else:
-                        self.rgba = color_like
-                else:
-                    self.hsv = color_like
-        except (TypeError, ValueError) as exc:
-            err_msg = (f"[{error_trace(self)}] `color_like` must be a string "
-                       f"referencing a named color ('white') or hex code of "
-                       f"the form '#rrggbb[aa]', or a tuple of numeric values "
-                       f"between 0 and 1, representing either an `(r, g, b)`, "
-                       f"`(h, s, v)` or `(r, g, b, a)` color specification"
-                       f"(received object of type: {type(color_like)})")
-            raise type(exc)(err_msg) from exc
+            self.rgba = to_rgba(color_like, space=space)
+        except ValueError as exc:
+            err_msg = f"[{error_trace(self)}] could not parse color"
+            raise ValueError(err_msg) from exc
 
     def properties(self) -> dict[str, str | tuple[float, ...]]:
         """Returns a property dictionary that lists all the mutable attributes
@@ -654,57 +622,37 @@ class DynamicColor:
 
     def __add__(
         self,
-        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+        color_like: str | tuple[NUMERIC, ...] | DynamicColor
     ) -> DynamicColor:
         """An alias for :meth:`~curvefit.color.DynamicColor.blend` with
-        `mode='add'`.
-
-        :param other_color: another DynamicColor to blend with, or a color-like
-            that can be coerced into one.
-        :type other_color: DynamicColor
-        :return: a DynamicColor representing the product of the additive blend
-        :rtype: DynamicColor
+        `mode='add'`
         """
-        return self.blend(other_color, mode="add")
+        return self.blend(color_like, mode="add")
 
     def __eq__(
         self,
-        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+        color_like: str | tuple[NUMERIC, ...] | DynamicColor
     ) -> bool:
-        """Distance-based comparison for DynamicColor equality.
-
-        :param other_color: another DynamicColor to compare to, or a color-like
-            that can be coerced into one.
-        :type other_color: DynamicColor
-        :return: `True` if the distance between colors is 0
-        :rtype: bool
-        """
-        return self.distance(other_color) == 0.0
+        """Distance-based comparison for DynamicColor equality."""
+        return isclose(self.distance(color_like), 0)
 
     def __hash__(self) -> int:
         return hash(id(self))
 
     def __ne__(
         self,
-        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+        color_like: str | tuple[NUMERIC, ...] | DynamicColor
     ) -> bool:
-        return not self.__eq__(other_color)
+        return not self.__eq__(color_like)
 
     def __mul__(
         self,
-        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+        color_like: str | tuple[NUMERIC, ...] | DynamicColor
     ) -> DynamicColor:
         """An alias for :meth:`~curvefit.color.DynamicColor.blend` with
-        `mode='multiply'`.
-
-        :param other_color: another DynamicColor to blend with, or a color-like
-            that can be coerced into one.
-        :type other_color: DynamicColor
-        :return: a DynamicColor representing the product of the multiplicative
-            blend
-        :rtype: DynamicColor
+        `mode='multiply'`
         """
-        return self.blend(other_color, mode="multiply")
+        return self.blend(color_like, mode="multiply")
 
     def __repr__(self) -> str:
         return f"DynamicColor({self.rgba})"
@@ -716,31 +664,18 @@ class DynamicColor:
 
     def __sub__(
         self,
-        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+        color_like: str | tuple[NUMERIC, ...] | DynamicColor
     ) -> DynamicColor:
         """An alias for :meth:`~curvefit.color.DynamicColor.blend` with
-        `mode='subtract'`.
-
-        :param other_color: another DynamicColor to blend with, or a color-like
-            that can be coerced into one.
-        :type other_color: DynamicColor
-        :return: a DynamicColor representing the product of the subtraction
-            blend
-        :rtype: DynamicColor
+        `mode='subtract'`
         """
-        return self.blend(other_color, mode="subtract")
+        return self.blend(color_like, mode="subtract")
 
     def __truediv__(
         self,
-        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+        color_like: str | tuple[NUMERIC, ...] | DynamicColor
     ) -> DynamicColor:
         """An alias for :meth:`~curvefit.color.DynamicColor.blend` with
-        `mode='divide'`.
-
-        :param other_color: another DynamicColor to blend with, or a color-like
-            that can be coerced into one.
-        :type other_color: DynamicColor
-        :return: a DynamicColor representing the product of the division blend
-        :rtype: DynamicColor
+        `mode='divide'`
         """
-        return self.blend(other_color, mode="divide")
+        return self.blend(color_like, mode="divide")

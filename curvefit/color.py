@@ -21,9 +21,11 @@ color2 = color + (0.1, 0.1, 0.1)  # basic arithmetic for quick blends
 `
 """
 from __future__ import annotations
+from bisect import insort
+from collections.abc import Sequence
+from functools import lru_cache
 from math import sqrt
 from string import hexdigits
-from typing import Optional, Union
 
 import matplotlib as mpl
 
@@ -40,7 +42,11 @@ for k, v in mpl.colors.get_named_colors_mapping().items():
         if v not in COLORS_NAMED:
             COLORS_NAMED[v] = [k]
         else:
+            # for python >= 3.10, bisect.insort now supports key functions
+            # from bisect import insort
+            # insort(COLORS_NAMED[v], k, key=len)
             COLORS_NAMED[v].append(k)
+            COLORS_NAMED[v].sort(key=len)  # prefer colors without extensions
 
 
 BLEND_MODES = {
@@ -60,16 +66,42 @@ BLEND_MODES = {
 }
 
 
+@lru_cache(maxsize=128)
+def rgba_to_hex(
+    rgba: tuple[NUMERIC, NUMERIC, NUMERIC, NUMERIC],
+    keep_alpha: bool = True) -> str:
+    return mpl.colors.to_hex(rgba, keep_alpha=keep_alpha)
+
+
+@lru_cache(maxsize=128)
+def hex_to_rgba(
+    hex_code: str,
+    alpha: NUMERIC = None) -> tuple[float, float, float, float]:
+    return mpl.colors.to_rgba(hex_code, alpha=alpha)
+
+
+@lru_cache(maxsize=128)
+def rgb_to_hsv(
+    rgb: tuple[NUMERIC, NUMERIC, NUMERIC]) -> tuple[NUMERIC, NUMERIC, NUMERIC]:
+    return tuple(mpl.colors.rgb_to_hsv(rgb))
+
+
+@lru_cache(maxsize=128)
+def hsv_to_rgb(
+    hsv: tuple[NUMERIC, NUMERIC, NUMERIC]) -> tuple[NUMERIC, NUMERIC, NUMERIC]:
+    return tuple(mpl.colors.hsv_to_rgb(hsv))
+
+
 class DynamicColor:
 
     """A callback-aware color object to simplify color manipulation in
     matplotlib.
     """
 
-    callback_properties = ("alpha", "hex_code", "hsv", "name", "rgb", "rgba")
+    callback_properties = {"alpha", "hex_code", "hsv", "name", "rgb", "rgba"}
 
     def __init__(self,
-                 color: Union[str, tuple[NUMERIC, ...]],
+                 color: str | tuple[NUMERIC, ...],
                  space: str = "rgb"):
         self.parse(color, space=space)
 
@@ -80,7 +112,7 @@ class DynamicColor:
         :return: Current alpha channel value, normalized to [0, 1]
         :rtype: float
         """
-        return self._alpha
+        return self._rgba[-1]
 
     @alpha.setter
     def alpha(self, new_alpha: NUMERIC) -> None:
@@ -109,8 +141,7 @@ class DynamicColor:
             err_msg = (f"[{error_trace(self)}] `alpha` must be a numeric "
                        f"between 0 and 1 (received: {repr(new_alpha)})")
             raise ValueError(err_msg)
-        self._alpha = new_alpha
-        self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
+        self._rgba = self._rgba[:3] + (new_alpha,)
 
     @callback_property
     def hex_code(self) -> str:
@@ -120,7 +151,7 @@ class DynamicColor:
         :return: current hex code, in `'#rrggbbaa'` format
         :rtype: str
         """
-        return self._hex_code
+        return rgba_to_hex(self._rgba)
 
     @hex_code.setter
     def hex_code(self, new_hex: str) -> None:
@@ -156,18 +187,10 @@ class DynamicColor:
                        f"of the form '#rrggbb' or '#rrggbbaa' (received: "
                        f"{new_hex})")
             raise ValueError(err_msg)
-        if len(new_hex) == 9:
-            self._hex_code = new_hex.lower()
+        if hasattr(self, "_rgba") and len(new_hex) == 7:
+            self._rgba = hex_to_rgba(new_hex, alpha=self._rgba[-1])
         else:
-            self._hex_code = new_hex.lower() + "ff"
-        rgba = mpl.colors.to_rgba(self._hex_code)
-        self._rgb = rgba[:-1]
-        self._alpha = rgba[-1]
-        self._hsv = tuple(mpl.colors.rgb_to_hsv(self._rgb))
-        if self._hex_code[:7] in COLORS_NAMED:
-            self._name = COLORS_NAMED[self._hex_code[:7]][0]
-        else:
-            self._name = None
+            self._rgba = hex_to_rgba(new_hex)
 
     @callback_property
     def hsv(self) -> tuple[float, float, float]:
@@ -178,7 +201,7 @@ class DynamicColor:
              normalized to `[0, 1]`
         :rtype: tuple[float, float, float]
         """
-        return self._hsv
+        return rgb_to_hsv(self._rgba[:3])
 
     @hsv.setter
     def hsv(self, new_hsv: tuple[NUMERIC, NUMERIC, NUMERIC]) -> None:
@@ -212,26 +235,21 @@ class DynamicColor:
             err_msg = (f"[{error_trace(self)}] `hsv` must be a length-3 tuple "
                        f"of numerics between 0 and 1 (received: {new_hsv})")
             raise ValueError(err_msg)
-        self._hsv = new_hsv
-        self._rgb = tuple(mpl.colors.hsv_to_rgb(self._hsv))
-        if not hasattr(self, "_alpha"):
-            self._alpha = 1.0
-        self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
-        if self._hex_code[:7] in COLORS_NAMED:
-            self._name = COLORS_NAMED[self._hex_code[:7]][0]
+        if hasattr(self, "_rgba"):
+            self._rgba = hsv_to_rgb(new_hsv) + (self._rgba[-1],)
         else:
-            self._name = None
+            self._rgba = hsv_to_rgb(new_hsv) + (1.,)
 
     @callback_property
-    def name(self) -> Optional[str]:
+    def name(self) -> str | None:
         """Getter for the current color's name, as defined in
         :func:`matplotlib.colors.get_named_colors_mapping`.  If no matching
         color can be found, this defaults to `None`.
 
         :return: name of a recognized color, or `None`
-        :rtype: Optional[str]
+        :rtype: str | None
         """
-        return self._name
+        return COLORS_NAMED.get(self.hex_code[:7], [None])[0]
 
     @name.setter
     def name(self, new_color: str) -> None:
@@ -258,17 +276,16 @@ class DynamicColor:
                        f"referencing a key in `NAMED_COLORS` (received object "
                        f"of type: {type(new_color)})")
             raise TypeError(err_msg)
-        if new_color not in NAMED_COLORS:
+        hex_code = NAMED_COLORS.get(new_color, None)
+        if not hex_code:
             err_msg = (f"[{error_trace(self)}] `name` must be a string "
                        f"referencing a key in `NAMED_COLORS` (received: "
                        f"{repr(new_color)})")
             raise ValueError(err_msg)
-        self._name = new_color
-        self._rgb = mpl.colors.to_rgb(NAMED_COLORS[self._name])
-        if not hasattr(self, "_alpha"):
-            self._alpha = 1.0
-        self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
-        self._hsv = tuple(mpl.colors.rgb_to_hsv(self._rgb))
+        if hasattr(self, "_rgba"):
+            self._rgba = hex_to_rgba(hex_code, alpha=self._rgba[-1])
+        else:
+            self._rgba = hex_to_rgba(hex_code)
 
     @callback_property
     def rgb(self) -> tuple[float, float, float]:
@@ -279,7 +296,7 @@ class DynamicColor:
             `[0, 1]`
         :rtype: tuple[float, float, float]
         """
-        return self._rgb
+        return self._rgba[:3]
 
     @rgb.setter
     def rgb(self, new_rgb: tuple[NUMERIC, NUMERIC, NUMERIC]) -> None:
@@ -313,15 +330,10 @@ class DynamicColor:
             err_msg = (f"[{error_trace(self)}] `rgb` must be a length-3 tuple "
                        f"of numerics between 0 and 1 (received: {new_rgb})")
             raise ValueError(err_msg)
-        self._rgb = new_rgb
-        self._hsv = tuple(mpl.colors.rgb_to_hsv(self._rgb))
-        if not hasattr(self, "_alpha"):
-            self._alpha = 1.0
-        self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
-        if self._hex_code[:7] in COLORS_NAMED:
-            self._name = COLORS_NAMED[self._hex_code[:7]][0]
+        if hasattr(self, "_rgba"):
+            self._rgba = new_rgb + (self._rgba[-1],)
         else:
-            self._name = None
+            self._rgba = new_rgb + (1.,)
 
     @callback_property
     def rgba(self) -> tuple[float, float, float, float]:
@@ -331,7 +343,7 @@ class DynamicColor:
         :return: length-4 tuple of RGBA values normalized to `[0, 1]`
         :rtype: tuple[float, float, float, float]
         """
-        return self._rgb + (self._alpha,)
+        return self._rgba
 
     @rgba.setter
     def rgba(
@@ -368,14 +380,7 @@ class DynamicColor:
                        f"tuple of numerics between 0 and 1 (received: "
                        f"{new_rgba})")
             raise ValueError(err_msg)
-        self._rgb = new_rgba[:-1]
-        self._alpha = new_rgba[-1]
-        self._hex_code = mpl.colors.to_hex(self.rgba, keep_alpha=True)
-        self._hsv = tuple(mpl.colors.rgb_to_hsv(self._rgb))
-        if self._hex_code[:7] in COLORS_NAMED:
-            self._name = COLORS_NAMED[self._hex_code[:7]][0]
-        else:
-            self._name = None
+        self._rgba = new_rgba
 
     def blend(self,
               other_color: DynamicColor,
@@ -567,7 +572,7 @@ class DynamicColor:
 
     def parse(
         self,
-        color_like: Union[str, tuple[NUMERIC, ...], DynamicColor],
+        color_like: str | tuple[NUMERIC, ...] | DynamicColor,
         space: str = "rgb") -> None:
         """Parses a color-like object, setting the current color to match.
 
@@ -585,7 +590,7 @@ class DynamicColor:
 
         :param colorlike: a DynamicColor or color-like string or tuple of
             `NUMERICS` that can be coerced into a DynamicColor object
-        :type colorlike: Union[str, tuple[NUMERIC, ...], DynamicColor]
+        :type colorlike: str | tuple[NUMERIC, ...] | DynamicColor
         :raises TypeError: if `colorlike` is of a type that can't be
             interpreted as a DynamicColor
         :raises ValueError: if `colorlike` has values that can't be coerced
@@ -627,13 +632,13 @@ class DynamicColor:
                        f"(received object of type: {type(color_like)})")
             raise type(exc)(err_msg) from exc
 
-    def properties(self) -> dict[str, Union[str, tuple[float, ...]]]:
+    def properties(self) -> dict[str, str | tuple[float, ...]]:
         """Returns a property dictionary that lists all the mutable attributes
         of this DynamicColor instance paired with their current values.
 
         :return: dictionary whose keys represent property names and values are
             their current settings.
-        :rtype: dict[str, Union[str, tuple[float, ...]]]
+        :rtype: dict[str, str | tuple[float, ...]]
         """
         prop_dict = {
             "alpha": self.alpha,

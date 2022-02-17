@@ -4,7 +4,7 @@ from typing import Union
 import matplotlib as mpl
 
 from curvefit import NUMERIC, NUMERIC_TYPECHECK, error_trace
-from curvefit.callback import add_callback
+from curvefit.callback import add_callback, callback_property
 from curvefit.color import DynamicColor
 
 
@@ -48,7 +48,56 @@ class DynamicText:
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-    @property
+    @callback_property
+    def alignment(self) -> str:
+        horizontal = self.obj.get_horizontalalignment()
+        vertical = self.obj.get_verticalalignment()
+        return (horizontal, vertical)
+
+    @alignment.setter
+    def alignment(self, new_alignment: Union[str, tuple[str, str]]) -> None:
+        allowed_horizontal = {"center", "right", "left"}
+        allowed_vertical = {"center", "top", "bottom", "baseline",
+                            "center_baseline"}
+        if not isinstance(new_alignment, (str, tuple)):
+            err_msg = (f"[{error_trace(self)}] `alignment` must be a string "
+                       f"or tuple of string `(horizontal, vertical)` with one "
+                       f"of the following values: (horizontal) "
+                       f"{allowed_horizontal}, (vertical) {allowed_vertical}, "
+                       f"(received object of type: {type(new_alignment)})")
+            raise TypeError(err_msg)
+        if isinstance(new_alignment, tuple):
+            horizontal = new_alignment[0]
+            vertical = new_alignment[1]
+            if horizontal not in allowed_horizontal:
+                err_msg = (f"[{error_trace(self)}] when given a tuple, the "
+                           f"first element of `alignment` must have one of "
+                           f"the following values: {allowed_horizontal} "
+                           f"(received: {repr(new_alignment)})")
+                raise ValueError(err_msg)
+            if vertical not in allowed_vertical:
+                err_msg = (f"[{error_trace(self)}] when given a tuple, the "
+                           f"second element of `alignment` must have one of "
+                           f"the following values: {allowed_vertical} "
+                           f"(received: {repr(new_alignment)})")
+                raise ValueError(err_msg)
+            self.obj.set_horizontalalignment(horizontal)
+            self.obj.set_verticalalignment(vertical)
+        else:
+            if new_alignment in allowed_horizontal:
+                self.obj.set_horizontalalignment(new_alignment)
+            elif new_alignment in allowed_vertical:
+                self.obj.set_verticalalignment(new_alignment)
+            else:
+                allowed_combined = allowed_horizontal.union(allowed_vertical)
+                err_msg = (f"[{error_trace(self)}] when given a string, "
+                           f"`alignment` must have one of the following "
+                           f"values: {allowed_combined}, (received: "
+                           f"{repr(new_alignment)})")
+                raise ValueError(err_msg)
+        self.obj.get_figure().tight_layout()
+
+    @callback_property
     def alpha(self) -> float:
         return self._color.alpha
 
@@ -56,20 +105,7 @@ class DynamicText:
     def alpha(self, new_alpha: NUMERIC) -> None:
         self._color.alpha = new_alpha
 
-    @property
-    def autowrap(self) -> bool:
-        return self.obj.get_wrap()
-
-    @autowrap.setter
-    def autowrap(self, new_wrap: bool) -> None:
-        if not isinstance(new_wrap, bool):
-            err_msg = (f"[{error_trace(self)}] `autowrap` must be a boolean "
-                       f"(received object of type: {type(new_wrap)})")
-            raise TypeError(err_msg)
-        self.obj.set_wrap(new_wrap)
-        self.obj.get_figure().tight_layout()
-
-    @property
+    @callback_property
     def color(self) -> DynamicColor:
         return self._color
 
@@ -79,7 +115,7 @@ class DynamicText:
         new_color: Union[str, tuple[NUMERIC, ...], DynamicColor]) -> None:
         self._color.parse(new_color)
 
-    @property
+    @callback_property
     def font(self) -> str:
         return self.obj.get_fontfamily()[0]  # should only ever have 1 font
 
@@ -102,29 +138,7 @@ class DynamicText:
         self.obj.set_fontfamily(new_font)
         self.obj.get_figure().tight_layout()
 
-    """TODO: replace *_alignment fields with generic alignment field"""
-    @property
-    def horizontal_alignment(self) -> str:
-        return self.obj.get_horizontalalignment()
-
-    @horizontal_alignment.setter
-    def horizontal_alignment(self, new_horizontal_alignment: str) -> None:
-        allowed = {"center", "right", "left"}
-        if not isinstance(new_horizontal_alignment, str):
-            err_msg = (f"[{error_trace(self)}] `horizontal_alignment` must be "
-                       f"a string with one of the following values: {allowed} "
-                       f"(received object of type: "
-                       f"{type(new_horizontal_alignment)})")
-            raise TypeError(err_msg)
-        if new_horizontal_alignment not in allowed:
-            err_msg = (f"[{error_trace(self)}] `horizontal_alignment` must be "
-                       f"a string with one of the following values: {allowed} "
-                       f"(received: {repr(new_horizontal_alignment)})")
-            raise ValueError(err_msg)
-        self.obj.set_horizontalalignment(new_horizontal_alignment)
-        self.obj.get_figure().tight_layout()
-
-    @property
+    @callback_property
     def rotation(self) -> float:
         return self.obj.get_rotation()
 
@@ -139,7 +153,7 @@ class DynamicText:
         self.obj.set_rotation(new_rotation)
         self.obj.get_figure().tight_layout()
 
-    @property
+    @callback_property
     def line_spacing(self) -> float:
         return self._line_spacing  # no get_linespacing() method
 
@@ -159,7 +173,7 @@ class DynamicText:
         self.obj.set_linespacing(self._line_spacing)
         self.obj.get_figure().tight_layout()
 
-    @property
+    @callback_property
     def position(self) -> tuple[float, float]:
         return self.obj.get_position()
 
@@ -180,7 +194,7 @@ class DynamicText:
         self.obj.set_position(new_position)
         self.obj.get_figure().tight_layout()
 
-    @property
+    @callback_property
     def size(self) -> float:
         return self.obj.get_fontsize()
 
@@ -197,42 +211,19 @@ class DynamicText:
         self.obj.set_fontsize(new_size)
         self.obj.get_figure().tight_layout()
 
-    @property
+    @callback_property
     def text(self) -> str:
-        """Return figure title (not related to any subplot)."""
         return self.obj.get_text()
 
     @text.setter
     def text(self, new_text: str) -> None:
-        """Set figure title (not related to any subplot)."""
         if not isinstance(new_text, str):
             err_msg = (f"[{error_trace(self)}] `text` must be a string "
                        f"(received object of type: {type(new_text)})")
             raise TypeError(err_msg)
         self.obj.set_text(new_text)
 
-    @property
-    def vertical_alignment(self) -> str:
-        return self.obj.get_verticalalignment()
-
-    @vertical_alignment.setter
-    def vertical_alignment(self, new_vertical_alignment: str) -> None:
-        allowed = {"center", "top", "bottom", "baseline", "center_baseline"}
-        if not isinstance(new_vertical_alignment, str):
-            err_msg = (f"[{error_trace(self)}] `vertical_alignment` must be a "
-                       f"string with one of the following values: {allowed} "
-                       f"(received object of type: "
-                       f"{type(new_vertical_alignment)})")
-            raise TypeError(err_msg)
-        if new_vertical_alignment not in allowed:
-            err_msg = (f"[{error_trace(self)}] `vertical_alignment` must be a "
-                       f"string with one of the following values: {allowed} "
-                       f"(received: {repr(new_vertical_alignment)})")
-            raise ValueError(err_msg)
-        self.obj.set_verticalalignment(new_vertical_alignment)
-        self.obj.get_figure().tight_layout()
-
-    @property
+    @callback_property
     def visible(self) -> bool:
         return self.obj.get_visible()
 
@@ -245,7 +236,7 @@ class DynamicText:
         self.obj.set_visible(new_visible)
         self.obj.get_figure().tight_layout()
 
-    @property
+    @callback_property
     def weight(self) -> str:
         return self.obj.get_fontweight()
 
@@ -267,22 +258,34 @@ class DynamicText:
         self.obj.set_fontweight(new_weight)
         self.obj.get_figure().tight_layout()
 
+    @callback_property
+    def wrap(self) -> bool:
+        return self.obj.get_wrap()
+
+    @wrap.setter
+    def wrap(self, new_wrap: bool) -> None:
+        if not isinstance(new_wrap, bool):
+            err_msg = (f"[{error_trace(self)}] `autowrap` must be a boolean "
+                       f"(received object of type: {type(new_wrap)})")
+            raise TypeError(err_msg)
+        self.obj.set_wrap(new_wrap)
+        self.obj.get_figure().tight_layout()
+
     def properties(
         self) -> dict[str, Union[str, NUMERIC, bool, tuple[NUMERIC, ...]]]:
         prop_dict = {
+            "alignment": self.alignment,
             "alpha": self.alpha,
-            "autowrap": self.autowrap,
             "color": self.color,
             "font": self.font,
-            "horizontal_alignment": self.horizontal_alignment,
             "rotation": self.rotation,
             "line_spacing": self.line_spacing,
             "position": self.position,
             "size": self.size,
             "text": self.text,
-            "vertical_alignment": self.vertical_alignment,
             "visible": self.visible,
-            "weight": self.weight
+            "weight": self.weight,
+            "wrap": self.wrap,
         }
         return prop_dict
 
@@ -294,4 +297,4 @@ class DynamicText:
         return f"DynamicText({repr(self.obj)}, {', '.join(props)})"
 
     def __str__(self) -> str:
-        return self.text
+        return str(self.text)

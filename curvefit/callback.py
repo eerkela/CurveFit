@@ -279,7 +279,7 @@ def add_callback(instance,
         if not isinstance(prop, CallbackProperty):
             raise TypeError(f"{prop_name} is not a CallbackProperty")
         prop.add_callback(instance, callback, priority=priority)
-    else:
+    else:  # prop_name is iterable
         for pname in prop_name:
             prop = getattr(type(instance), pname)
             if not isinstance(prop, CallbackProperty):

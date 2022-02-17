@@ -9,15 +9,10 @@ from curvefit.callback import add_callback
 from curvefit.color import COLORS_NAMED, DynamicColor, NAMED_COLORS
 
 
-"""
-TODO: generate error handling + blend/diff/invert tests
-"""
-
-
 assert_equal_float = partial(np.testing.assert_almost_equal, decimal=3)
 
 
-class DynamicColorTestCases(unittest.TestCase):
+class DynamicColorBasicTests(unittest.TestCase):
 
     def test_init_hex_code_no_alpha(self):
         color = DynamicColor("#ff0000")  # pure red
@@ -69,9 +64,160 @@ class DynamicColorTestCases(unittest.TestCase):
         assert_equal_float(color.alpha, 0.6)
         self.assertEqual(color.hex_code, "#00ffff99")
         assert_equal_float(color.hsv, (0.5, 1.0, 1.0))
-        self.assertEqual(color.name, "xkcd:cyan")
+        self.assertEqual(color.name, "aqua")
         assert_equal_float(color.rgb, (0.0, 1.0, 1.0))
         assert_equal_float(color.rgba, (0.0, 1.0, 1.0, 0.6))
+
+    def test_parse_in_place_errors(self):
+        bad_color_type = 12345
+        bad_color_value = "this is not a color-like"
+        bad_space_type = 42
+        bad_space_value = "this is an invalid color space"
+
+        # bad_color_type
+        color = DynamicColor("red")
+        with self.assertRaises(TypeError) as cm:
+            color.parse(bad_color_type)
+        err_msg = ("[DynamicColor.parse] `color_like` must be a string "
+                   "referencing a named color ('white') or hex code of the "
+                   "form '#rrggbb[aa]', or a tuple of numeric values between "
+                   "0 and 1, representing either an `(r, g, b)`, `(h, s, v)` "
+                   "or `(r, g, b, a)` color specification")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_color_value
+        with self.assertRaises(ValueError) as cm:
+            color.parse(bad_color_value)
+        err_msg = ("[DynamicColor.parse] `color_like` must be a string "
+                   "referencing a named color ('white') or hex code of the "
+                   "form '#rrggbb[aa]', or a tuple of numeric values between "
+                   "0 and 1, representing either an `(r, g, b)`, `(h, s, v)` "
+                   "or `(r, g, b, a)` color specification")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_space_type
+        with self.assertRaises(TypeError) as cm:
+            color.parse((0.5, 0.5, 0.5), space=bad_space_type)
+        err_msg = ("[DynamicColor.parse] `space` must be a string with one of "
+                   "the following values:")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+        # bad_mode_value
+        with self.assertRaises(ValueError) as cm:
+            color.parse((0.5, 0.5, 0.5), space=bad_space_value)
+        err_msg = ("[DynamicColor.parse] `space` must be a string with one of "
+                   "the following values:")
+        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+    def test_properties(self):
+        color = DynamicColor((1, 0, 0, 1))
+        expected = {
+            "alpha": 1.0,
+            "hex_code": "#ff0000ff",
+            "hsv": (0, 1.0, 1.0),
+            "name": "red",
+            "rgb": (1.0, 0.0, 0.0),
+            "rgba": (1.0, 0.0, 0.0, 1.0)
+        }
+        self.assertDictEqual(color.properties(), expected)
+
+    def test_equality(self):
+        color = DynamicColor((0, 1, 0))
+        self.assertEqual(color, DynamicColor((0, 1, 0)))
+        self.assertNotEqual(color, DynamicColor((1, 0, 0)))
+
+    def test_hash(self):
+        color1 = DynamicColor((0, 0, 1))
+        color2 = DynamicColor((0, 0, 1))
+        self.assertNotEqual(hash(color1), hash(color2))
+
+    def test_repr(self):
+        color = DynamicColor((1, 1, 0, 1))
+        self.assertEqual(repr(color), "DynamicColor((1, 1, 0, 1))")
+
+    def test_str(self):
+        color = DynamicColor("red")
+        self.assertEqual(str(color), "red")
+        color.hex_code = "#0587ef77"
+        self.assertEqual(str(color), "#0587ef77")
+
+
+class DynamicColorCallbackTests(unittest.TestCase):
+
+    def test_alpha_callback(self):
+        def callback(color_instance):
+            color_instance.alpha = 0
+
+        color = DynamicColor("white")
+        add_callback(color, "alpha", callback)
+        assert_equal_float(color.alpha, 1.0)
+        color.alpha = 1.0  # no state change
+        assert_equal_float(color.alpha, 1.0)  # callback not invoked
+        color.alpha = 0.5  # state change
+        assert_equal_float(color.alpha, 0.0)  # callback invoked
+
+    def test_hex_code_callback(self):
+        def callback(color_instance):
+            color_instance.hex_code = "#000000ff"
+
+        color = DynamicColor("#ffffffff")
+        add_callback(color, "hex_code", callback)
+        self.assertEqual(color.hex_code, "#ffffffff")
+        color.hex_code = "#ffffffff"  # no state change
+        self.assertEqual(color.hex_code, "#ffffffff")  # callback not invoked
+        color.hex_code = "#ff0000ff"  # state change
+        self.assertEqual(color.hex_code, "#000000ff")  # callback invoked
+
+    def test_hsv_callback(self):
+        def callback(color_instance):
+            color_instance.hsv = (0, 0, 0)
+
+        color = DynamicColor((0, 0, 1), space="hsv")
+        add_callback(color, "hsv", callback)
+        assert_equal_float(color.hsv, (0.0, 0.0, 1.0))
+        color.hsv = (0.0, 0.0, 1.0)  # no state change
+        assert_equal_float(color.hsv, (0.0, 0.0, 1.0))  # callback not invoked
+        color.hsv = (0.0, 1.0, 1.0)  # state change
+        assert_equal_float(color.hsv, (0.0, 0.0, 0.0))  # callback invoked
+
+    def test_name_callback(self):
+        def callback(color_instance):
+            color_instance.name = "black"
+
+        color = DynamicColor("white")
+        add_callback(color, "name", callback)
+        self.assertEqual(color.name, "white")
+        color.name = "white"  # no state change
+        self.assertEqual(color.name, "white")  # callback not invoked
+        color.name = "red"  # state change
+        self.assertEqual(color.name, "black")  # callback invoked
+
+    def test_rgb_callback(self):
+        def callback(color_instance):
+            color_instance.rgb = (0, 0, 0)
+
+        color = DynamicColor((1, 1, 1))
+        add_callback(color, "rgb", callback)
+        assert_equal_float(color.rgb, (1.0, 1.0, 1.0))
+        color.rgb = (1.0, 1.0, 1.0)  # no state change
+        assert_equal_float(color.rgb, (1.0, 1.0, 1.0))  # callback not invoked
+        color.rgb = (1.0, 0.0, 0.0)  # state change
+        assert_equal_float(color.rgb, (0.0, 0.0, 0.0))  # callback invoked
+
+    def test_rgba_callback(self):
+        def callback(color_instance):
+            color_instance.rgba = (0, 0, 0, 0)
+
+        color = DynamicColor((1, 1, 1, 1))
+        add_callback(color, "rgba", callback)
+        assert_equal_float(color.rgba, (1.0, 1.0, 1.0, 1.0))
+        color.rgba = (1.0, 1.0, 1.0, 1.0)  # no state change
+        assert_equal_float(color.rgba, (1.0, 1.0, 1.0, 1.0))  # callback not invoked
+        color.rgba = (1.0, 0.0, 0.0, 1.0)  # state change
+        assert_equal_float(color.rgba, (0.0, 0.0, 0.0, 0.0))  # callback invoked
+
+
+class DynamicColorSweepTests(unittest.TestCase):
 
     def test_red_sweep(self):
         starting_color = (0.0, 0.0, 0.0)
@@ -245,7 +391,7 @@ class DynamicColorTestCases(unittest.TestCase):
     def test_hue_sweep(self):
         starting_color = (0.0, 1.0, 1.0)
         color = DynamicColor(starting_color, space="hsv")
-        for test_hue in np.linspace(0, 1, num=256):
+        for test_hue in np.linspace(0, 1 - 1/256, num=255):
             # get expected values:
             expected_hsv = (test_hue,) + starting_color[1:]
             expected_rgb = tuple(mpl.colors.hsv_to_rgb(expected_hsv))
@@ -277,7 +423,7 @@ class DynamicColorTestCases(unittest.TestCase):
             assert_equal_float(color.rgba, expected_rgb + (1.0,))
 
     def test_value_sweep(self):
-        starting_color = (0.0, 1.0, 0.0)
+        starting_color = (0.0, 0.0, 0.0)
         color = DynamicColor(starting_color, space="hsv")
         for test_val in np.linspace(0, 1, num=256):
             # get expected values:
@@ -341,77 +487,8 @@ class DynamicColorTestCases(unittest.TestCase):
             assert_equal_float(color.rgb, expected_rgb)
             assert_equal_float(color.rgba, expected_rgb + (1.0,))
 
-    def test_alpha_callback(self):
-        def callback(color_instance):
-            color_instance.alpha = 0
 
-        color = DynamicColor("white")
-        add_callback(color, "alpha", callback)
-        assert_equal_float(color.alpha, 1.0)
-        color.alpha = 1.0  # no state change
-        assert_equal_float(color.alpha, 1.0)  # callback not invoked
-        color.alpha = 0.5  # state change
-        assert_equal_float(color.alpha, 0.0)  # callback invoked
-
-    def test_hex_code_callback(self):
-        def callback(color_instance):
-            color_instance.hex_code = "#000000ff"
-
-        color = DynamicColor("#ffffffff")
-        add_callback(color, "hex_code", callback)
-        self.assertEqual(color.hex_code, "#ffffffff")
-        color.hex_code = "#ffffffff"  # no state change
-        self.assertEqual(color.hex_code, "#ffffffff")  # callback not invoked
-        color.hex_code = "#ff0000ff"  # state change
-        self.assertEqual(color.hex_code, "#000000ff")  # callback invoked
-
-    def test_hsv_callback(self):
-        def callback(color_instance):
-            color_instance.hsv = (0, 0, 0)
-
-        color = DynamicColor((0, 0, 1), space="hsv")
-        add_callback(color, "hsv", callback)
-        assert_equal_float(color.hsv, (0.0, 0.0, 1.0))
-        color.hsv = (0.0, 0.0, 1.0)  # no state change
-        assert_equal_float(color.hsv, (0.0, 0.0, 1.0))  # callback not invoked
-        color.hsv = (0.0, 1.0, 1.0)  # state change
-        assert_equal_float(color.hsv, (0.0, 0.0, 0.0))  # callback invoked
-
-    def test_name_callback(self):
-        def callback(color_instance):
-            color_instance.name = "black"
-
-        color = DynamicColor("white")
-        add_callback(color, "name", callback)
-        self.assertEqual(color.name, "white")
-        color.name = "white"  # no state change
-        self.assertEqual(color.name, "white")  # callback not invoked
-        color.name = "red"  # state change
-        self.assertEqual(color.name, "black")  # callback invoked
-
-    def test_rgb_callback(self):
-        def callback(color_instance):
-            color_instance.rgb = (0, 0, 0)
-
-        color = DynamicColor((1, 1, 1))
-        add_callback(color, "rgb", callback)
-        assert_equal_float(color.rgb, (1.0, 1.0, 1.0))
-        color.rgb = (1.0, 1.0, 1.0)  # no state change
-        assert_equal_float(color.rgb, (1.0, 1.0, 1.0))  # callback not invoked
-        color.rgb = (1.0, 0.0, 0.0)  # state change
-        assert_equal_float(color.rgb, (0.0, 0.0, 0.0))  # callback invoked
-
-    def test_rgba_callback(self):
-        def callback(color_instance):
-            color_instance.rgba = (0, 0, 0, 0)
-
-        color = DynamicColor((1, 1, 1, 1))
-        add_callback(color, "rgba", callback)
-        assert_equal_float(color.rgba, (1.0, 1.0, 1.0, 1.0))
-        color.rgba = (1.0, 1.0, 1.0, 1.0)  # no state change
-        assert_equal_float(color.rgba, (1.0, 1.0, 1.0, 1.0))  # callback not invoked
-        color.rgba = (1.0, 0.0, 0.0, 1.0)  # state change
-        assert_equal_float(color.rgba, (0.0, 0.0, 0.0, 0.0))  # callback invoked
+class DynamicColorErrorTests(unittest.TestCase):
 
     def test_alpha_errors(self):
         bad_type = "1"
@@ -622,6 +699,9 @@ class DynamicColorTestCases(unittest.TestCase):
         err_msg = ("[DynamicColor.rgba] `rgba` must be a length-4 tuple of "
                    "numerics between 0 and 1")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+
+class DynamicColorBlendTests(unittest.TestCase):
 
     def test_additive_blend(self):
         # basic additive blend
@@ -873,6 +953,9 @@ class DynamicColorTestCases(unittest.TestCase):
                    "the following values:")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
 
+
+class DynamicColorDistanceTests(unittest.TestCase):
+
     def test_distance_measure(self):
         # unweighted distance
         color = DynamicColor((1, 1, 1))
@@ -903,6 +986,9 @@ class DynamicColorTestCases(unittest.TestCase):
                    "instance of DynamicColor or a color-like object that can "
                    "be easily converted into one")
         self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
+
+
+class DynamicColorInversionTests(unittest.TestCase):
 
     def test_invert(self):
         # standard inversion
@@ -935,76 +1021,3 @@ class DynamicColorTestCases(unittest.TestCase):
         assert_equal_float(color.rgb, rgb)
         color.parse(rgba)
         assert_equal_float(color.rgba, rgba)
-
-    def test_parse_in_place_errors(self):
-        bad_color_type = 12345
-        bad_color_value = "this is not a color-like"
-        bad_space_type = 42
-        bad_space_value = "this is an invalid color space"
-
-        # bad_color_type
-        color = DynamicColor("red")
-        with self.assertRaises(TypeError) as cm:
-            color.parse(bad_color_type)
-        err_msg = ("[DynamicColor.parse] `color_like` must be a string "
-                   "referencing a named color ('white') or hex code of the "
-                   "form '#rrggbb[aa]', or a tuple of numeric values between "
-                   "0 and 1, representing either an `(r, g, b)`, `(h, s, v)` "
-                   "or `(r, g, b, a)` color specification")
-        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
-
-        # bad_color_value
-        with self.assertRaises(ValueError) as cm:
-            color.parse(bad_color_value)
-        err_msg = ("[DynamicColor.parse] `color_like` must be a string "
-                   "referencing a named color ('white') or hex code of the "
-                   "form '#rrggbb[aa]', or a tuple of numeric values between "
-                   "0 and 1, representing either an `(r, g, b)`, `(h, s, v)` "
-                   "or `(r, g, b, a)` color specification")
-        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
-
-        # bad_space_type
-        with self.assertRaises(TypeError) as cm:
-            color.parse((0.5, 0.5, 0.5), space=bad_space_type)
-        err_msg = ("[DynamicColor.parse] `space` must be a string with one of "
-                   "the following values:")
-        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
-
-        # bad_mode_value
-        with self.assertRaises(ValueError) as cm:
-            color.parse((0.5, 0.5, 0.5), space=bad_space_value)
-        err_msg = ("[DynamicColor.parse] `space` must be a string with one of "
-                   "the following values:")
-        self.assertEqual(str(cm.exception)[:len(err_msg)], err_msg)
-
-    def test_properties(self):
-        color = DynamicColor((1, 0, 0, 1))
-        expected = {
-            "alpha": 1.0,
-            "hex_code": "#ff0000ff",
-            "hsv": (0, 1.0, 1.0),
-            "name": "red",
-            "rgb": (1.0, 0.0, 0.0),
-            "rgba": (1.0, 0.0, 0.0, 1.0)
-        }
-        self.assertDictEqual(color.properties(), expected)
-
-    def test_equality(self):
-        color = DynamicColor((0, 1, 0))
-        self.assertEqual(color, DynamicColor((0, 1, 0)))
-        self.assertNotEqual(color, DynamicColor((1, 0, 0)))
-
-    def test_hash(self):
-        color1 = DynamicColor((0, 0, 1))
-        color2 = DynamicColor((0, 0, 1))
-        self.assertNotEqual(hash(color1), hash(color2))
-
-    def test_repr(self):
-        color = DynamicColor((1, 1, 0, 1))
-        self.assertEqual(repr(color), "DynamicColor((1, 1, 0, 1))")
-
-    def test_str(self):
-        color = DynamicColor("white")
-        self.assertEqual(str(color), "white")
-        color.hex_code = "#0587ef77"
-        self.assertEqual(str(color), "#0587ef77")

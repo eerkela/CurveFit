@@ -21,8 +21,6 @@ color2 = color + (0.1, 0.1, 0.1)  # basic arithmetic for quick blends
 `
 """
 from __future__ import annotations
-from bisect import insort
-from collections.abc import Sequence
 from functools import lru_cache
 from math import sqrt
 from string import hexdigits
@@ -70,6 +68,7 @@ BLEND_MODES = {
 def rgba_to_hex(
     rgba: tuple[NUMERIC, NUMERIC, NUMERIC, NUMERIC],
     keep_alpha: bool = True) -> str:
+    """Convert an RGBA color to a hex code"""
     return mpl.colors.to_hex(rgba, keep_alpha=keep_alpha)
 
 
@@ -77,18 +76,21 @@ def rgba_to_hex(
 def hex_to_rgba(
     hex_code: str,
     alpha: NUMERIC = None) -> tuple[float, float, float, float]:
+    """Convert a hex code to RGBA color"""
     return mpl.colors.to_rgba(hex_code, alpha=alpha)
 
 
 @lru_cache(maxsize=128)
 def rgb_to_hsv(
     rgb: tuple[NUMERIC, NUMERIC, NUMERIC]) -> tuple[NUMERIC, NUMERIC, NUMERIC]:
+    """Convert an RGB color to HSV color space"""
     return tuple(mpl.colors.rgb_to_hsv(rgb))
 
 
 @lru_cache(maxsize=128)
 def hsv_to_rgb(
     hsv: tuple[NUMERIC, NUMERIC, NUMERIC]) -> tuple[NUMERIC, NUMERIC, NUMERIC]:
+    """Convert an HSV color to RGB color space"""
     return tuple(mpl.colors.hsv_to_rgb(hsv))
 
 
@@ -383,7 +385,7 @@ class DynamicColor:
         self._rgba = new_rgba
 
     def blend(self,
-              other_color: DynamicColor,
+              other_color: str | tuple[NUMERIC, ...] | DynamicColor,
               mode: str = "overlay",
               in_place: bool = False,
               space: str = "rgb") -> DynamicColor:
@@ -489,7 +491,7 @@ class DynamicColor:
         return DynamicColor(new_rgb)
 
     def distance(self,
-        other_color: DynamicColor,
+        other_color: str | tuple[NUMERIC, ...] | DynamicColor,
         weighted: bool = False,
         space: str = "rgb") -> float:
         """Returns the Euclidean distance between the RGB values of two
@@ -650,7 +652,10 @@ class DynamicColor:
         }
         return prop_dict
 
-    def __add__(self, other_color: DynamicColor) -> DynamicColor:
+    def __add__(
+        self,
+        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+    ) -> DynamicColor:
         """An alias for :meth:`~curvefit.color.DynamicColor.blend` with
         `mode='add'`.
 
@@ -662,7 +667,10 @@ class DynamicColor:
         """
         return self.blend(other_color, mode="add")
 
-    def __eq__(self, other_color: DynamicColor) -> bool:
+    def __eq__(
+        self,
+        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+    ) -> bool:
         """Distance-based comparison for DynamicColor equality.
 
         :param other_color: another DynamicColor to compare to, or a color-like
@@ -676,10 +684,16 @@ class DynamicColor:
     def __hash__(self) -> int:
         return hash(id(self))
 
-    def __ne__(self, other_color: DynamicColor) -> bool:
+    def __ne__(
+        self,
+        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+    ) -> bool:
         return not self.__eq__(other_color)
 
-    def __mul__(self, other_color: DynamicColor) -> DynamicColor:
+    def __mul__(
+        self,
+        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+    ) -> DynamicColor:
         """An alias for :meth:`~curvefit.color.DynamicColor.blend` with
         `mode='multiply'`.
 
@@ -700,7 +714,10 @@ class DynamicColor:
             return self.name
         return self.hex_code
 
-    def __sub__(self, other_color: DynamicColor) -> DynamicColor:
+    def __sub__(
+        self,
+        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+    ) -> DynamicColor:
         """An alias for :meth:`~curvefit.color.DynamicColor.blend` with
         `mode='subtract'`.
 
@@ -713,7 +730,10 @@ class DynamicColor:
         """
         return self.blend(other_color, mode="subtract")
 
-    def __truediv__(self, other_color: DynamicColor) -> DynamicColor:
+    def __truediv__(
+        self,
+        other_color: str | tuple[NUMERIC, ...] | DynamicColor
+    ) -> DynamicColor:
         """An alias for :meth:`~curvefit.color.DynamicColor.blend` with
         `mode='divide'`.
 

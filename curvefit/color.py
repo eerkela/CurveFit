@@ -180,9 +180,9 @@ class DynamicColor:
                        f"of the form '#rrggbb' or '#rrggbbaa' (received "
                        f"object of type: {type(new_hex)})")
             raise TypeError(err_msg)
-        if (not (len(new_hex) == 7 or len(new_hex) == 9) or
-            not new_hex[0] == "#" or
-            not all(c in hexdigits for c in new_hex[1:])):
+        if ((len(new_hex) != 7 and len(new_hex) != 9) or
+            new_hex[0] != "#" or
+            any(c not in hexdigits for c in new_hex[1:])):
             err_msg = (f"[{error_trace(self)}] `hex_code` must be a string "
                        f"of the form '#rrggbb' or '#rrggbbaa' (received: "
                        f"{new_hex})")
@@ -230,8 +230,8 @@ class DynamicColor:
                        f"type: {type(new_hsv)})")
             raise TypeError(err_msg)
         if (len(new_hsv) != 3 or
-            not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_hsv) or
-            not all(0 <= v <= 1 for v in new_hsv)):
+            any(not isinstance(v, NUMERIC_TYPECHECK) for v in new_hsv) or
+            any(not 0 <= v <= 1 for v in new_hsv)):
             err_msg = (f"[{error_trace(self)}] `hsv` must be a length-3 tuple "
                        f"of numerics between 0 and 1 (received: {new_hsv})")
             raise ValueError(err_msg)
@@ -325,8 +325,8 @@ class DynamicColor:
                        f"type: {type(new_rgb)})")
             raise TypeError(err_msg)
         if (len(new_rgb) != 3 or
-            not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_rgb) or
-            not all(0 <= v <= 1 for v in new_rgb)):
+            any(not isinstance(v, NUMERIC_TYPECHECK) for v in new_rgb) or
+            any(not 0 <= v <= 1 for v in new_rgb)):
             err_msg = (f"[{error_trace(self)}] `rgb` must be a length-3 tuple "
                        f"of numerics between 0 and 1 (received: {new_rgb})")
             raise ValueError(err_msg)
@@ -374,8 +374,8 @@ class DynamicColor:
                        f"of type: {type(new_rgba)})")
             raise TypeError(err_msg)
         if (len(new_rgba) != 4 or
-            not all(isinstance(v, NUMERIC_TYPECHECK) for v in new_rgba) or
-            not all(0 <= v <= 1 for v in new_rgba)):
+            any(not isinstance(v, NUMERIC_TYPECHECK) for v in new_rgba) or
+            any(not 0 <= v <= 1 for v in new_rgba)):
             err_msg = (f"[{error_trace(self)}] `rgba` must be a length-4 "
                        f"tuple of numerics between 0 and 1 (received: "
                        f"{new_rgba})")

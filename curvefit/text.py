@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import matplotlib as mpl
+from matplotlib.font_manager import findfont, findSystemFonts, FontProperties, get_font
 
 from curvefit import NUMERIC, NUMERIC_TYPECHECK, error_trace
 from curvefit.callback import add_callback, callback_property
@@ -13,14 +14,14 @@ TODO: Implement Sphinx documentation
 
 
 SYSTEM_FONTS = set()
-for fpath in mpl.font_manager.findSystemFonts():
+for fpath in findSystemFonts():
     # matplotlib.font_manager.findSystemFonts() is a bit greedy and often
     # returns fonts that cannot actually be used by
     # matplotlib.text.Text.set_fontfamily()
     try:
-        font_family = mpl.font_manager.get_font(fpath).family_name
-        font_prop = mpl.font_manager.FontProperties(font_family)
-        mpl.font_manager.findfont(font_prop, fallback_to_default=False)
+        font_family = get_font(fpath).family_name
+        font_prop = FontProperties(font_family)
+        findfont(font_prop, fallback_to_default=False)
         SYSTEM_FONTS.add(font_family)
     except ValueError:
         continue
@@ -101,6 +102,7 @@ class DynamicText:
     @alpha.setter
     def alpha(self, new_alpha: NUMERIC) -> None:
         self._color.alpha = new_alpha
+        
 
     @callback_property
     def color(self) -> DynamicColor:

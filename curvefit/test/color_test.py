@@ -1,8 +1,8 @@
 from functools import partial
-import numpy as np
 import random
 import unittest
 
+import numpy as np
 import matplotlib as mpl
 
 from curvefit.callback import add_callback
@@ -14,7 +14,8 @@ assert_equal_float = partial(np.testing.assert_almost_equal, decimal=3)
 
 class DynamicColorBasicTests(unittest.TestCase):
 
-    def test_init_hex_code_no_alpha(self):
+    def test_basic_init(self):
+        # hex code (no alpha)
         color = DynamicColor("#ff0000")  # pure red
         assert_equal_float(color.alpha, 1.0)
         self.assertEqual(color.hex_code, "#ff0000ff")
@@ -23,7 +24,7 @@ class DynamicColorBasicTests(unittest.TestCase):
         assert_equal_float(color.rgb, (1.0, 0.0, 0.0))
         assert_equal_float(color.rgba, (1.0, 0.0, 0.0, 1.0))
 
-    def test_init_hex_code_with_alpha(self):
+        # hex code (with alpha)
         color = DynamicColor("#00ff0080")  # pure green
         assert_equal_float(color.alpha, 0.50196)
         self.assertEqual(color.hex_code, "#00ff0080")
@@ -32,7 +33,7 @@ class DynamicColorBasicTests(unittest.TestCase):
         assert_equal_float(color.rgb, (0.0, 1.0, 0.0))
         assert_equal_float(color.rgba, (0.0, 1.0, 0.0, 0.50196))
 
-    def test_init_hsv(self):
+        # hsv
         color = DynamicColor((0.16666666, 1.0, 1.0), space="hsv")  # yellow
         assert_equal_float(color.alpha, 1.0)
         self.assertEqual(color.hex_code, "#ffff00ff")
@@ -41,7 +42,7 @@ class DynamicColorBasicTests(unittest.TestCase):
         assert_equal_float(color.rgb, (1.0, 1.0, 0.0))
         assert_equal_float(color.rgba, (1.0, 1.0, 0.0, 1.0))
 
-    def test_init_named_color(self):
+        # named color
         color = DynamicColor("blue")  # pure blue
         assert_equal_float(color.alpha, 1.0)
         self.assertEqual(color.hex_code, "#0000ffff")
@@ -50,7 +51,7 @@ class DynamicColorBasicTests(unittest.TestCase):
         assert_equal_float(color.rgb, (0.0, 0.0, 1.0))
         assert_equal_float(color.rgba, (0.0, 0.0, 1.0, 1.0))
 
-    def test_init_rgb(self):
+        # rgb
         color = DynamicColor((1, 0, 1))  # magenta
         assert_equal_float(color.alpha, 1.0)
         self.assertEqual(color.hex_code, "#ff00ffff")
@@ -59,7 +60,7 @@ class DynamicColorBasicTests(unittest.TestCase):
         assert_equal_float(color.rgb, (1.0 ,0.0, 1.0))
         assert_equal_float(color.rgba, (1.0, 0.0, 1.0, 1.0))
 
-    def test_init_rgba(self):
+        # rgba
         color = DynamicColor((0.0, 1.0, 1.0, 0.6))  # cyan, 60% opacity
         assert_equal_float(color.alpha, 0.6)
         self.assertEqual(color.hex_code, "#00ffff99")
@@ -68,14 +69,137 @@ class DynamicColorBasicTests(unittest.TestCase):
         assert_equal_float(color.rgb, (0.0, 1.0, 1.0))
         assert_equal_float(color.rgba, (0.0, 1.0, 1.0, 0.6))
 
-    def test_parse_in_place_errors(self):
+    def test_modification_after_init(self):
+        color = DynamicColor("white")
+
+        # alpha
+        color.alpha = 0.8
+        assert_equal_float(color.alpha, 0.8)
+        self.assertEqual(color.hex_code, "#ffffffcc")
+        assert_equal_float(color.hsv, (0.0, 0.0, 1.0))
+        self.assertEqual(color.name, "white")
+        assert_equal_float(color.rgb, (1.0, 1.0, 1.0))
+        assert_equal_float(color.rgba, (1.0, 1.0, 1.0, 0.8))
+
+        # hex code (no alpha)
+        color.hex_code = "#ff0000"  # pure red
+        assert_equal_float(color.alpha, 0.8)
+        self.assertEqual(color.hex_code, "#ff0000cc")
+        assert_equal_float(color.hsv, (0.0, 1.0, 1.0))
+        self.assertEqual(color.name, "red")
+        assert_equal_float(color.rgb, (1.0, 0.0, 0.0))
+        assert_equal_float(color.rgba, (1.0, 0.0, 0.0, 0.8))
+
+        # hex code (with alpha)
+        color.hex_code = "#00ff0080"  # 50% alpha
+        assert_equal_float(color.alpha, 0.50196)
+        self.assertEqual(color.hex_code, "#00ff0080")
+        assert_equal_float(color.hsv, (0.33333, 1.0, 1.0))
+        self.assertEqual(color.name, 'lime')
+        assert_equal_float(color.rgb, (0.0, 1.0, 0.0))
+        assert_equal_float(color.rgba, (0.0, 1.0, 0.0, 0.50196))
+
+        # hsv
+        color.hsv = (0.16666666, 1.0, 1.0)  # yellow
+        assert_equal_float(color.alpha, 0.50196)
+        self.assertEqual(color.hex_code, "#ffff0080")
+        assert_equal_float(color.hsv, (0.16666, 1.0, 1.0))
+        self.assertEqual(color.name, "yellow")
+        assert_equal_float(color.rgb, (1.0, 1.0, 0.0))
+        assert_equal_float(color.rgba, (1.0, 1.0, 0.0, 0.50196))
+
+        # named color
+        color.name = "blue"  # pure blue
+        assert_equal_float(color.alpha, 0.50196)
+        self.assertEqual(color.hex_code, "#0000ff80")
+        assert_equal_float(color.hsv, (0.66666, 1.0, 1.0))
+        self.assertEqual(color.name, "blue")
+        assert_equal_float(color.rgb, (0.0, 0.0, 1.0))
+        assert_equal_float(color.rgba, (0.0, 0.0, 1.0, 0.50196))
+
+        # rgb
+        color.rgb = (1, 0, 1)  # magenta
+        assert_equal_float(color.alpha, 0.50196)
+        self.assertEqual(color.hex_code, "#ff00ff80")
+        assert_equal_float(color.hsv, (0.83333, 1.0, 1.0))
+        self.assertEqual(color.name, "fuchsia")
+        assert_equal_float(color.rgb, (1.0 ,0.0, 1.0))
+        assert_equal_float(color.rgba, (1.0, 0.0, 1.0, 0.50196))
+
+        # rgba
+        color.rgba = (0.0, 1.0, 1.0, 0.6)  # cyan, 60% opacity
+        assert_equal_float(color.alpha, 0.6)
+        self.assertEqual(color.hex_code, "#00ffff99")
+        assert_equal_float(color.hsv, (0.5, 1.0, 1.0))
+        self.assertEqual(color.name, "aqua")
+        assert_equal_float(color.rgb, (0.0, 1.0, 1.0))
+        assert_equal_float(color.rgba, (0.0, 1.0, 1.0, 0.6))
+
+    def test_parse_in_place(self):
+        color = DynamicColor("white")
+        color.alpha = 0.8
+
+        # hex code (no alpha)
+        color.parse("#ff0000")  # pure red
+        assert_equal_float(color.alpha, 0.8)
+        self.assertEqual(color.hex_code, "#ff0000cc")
+        assert_equal_float(color.hsv, (0.0, 1.0, 1.0))
+        self.assertEqual(color.name, "red")
+        assert_equal_float(color.rgb, (1.0, 0.0, 0.0))
+        assert_equal_float(color.rgba, (1.0, 0.0, 0.0, 0.8))
+
+        # hex code (with alpha)
+        color.parse("#00ff0080")  # 50% alpha
+        assert_equal_float(color.alpha, 0.50196)
+        self.assertEqual(color.hex_code, "#00ff0080")
+        assert_equal_float(color.hsv, (0.33333, 1.0, 1.0))
+        self.assertEqual(color.name, 'lime')
+        assert_equal_float(color.rgb, (0.0, 1.0, 0.0))
+        assert_equal_float(color.rgba, (0.0, 1.0, 0.0, 0.50196))
+
+        # hsv
+        color.parse((0.16666666, 1.0, 1.0), space="hsv")  # yellow
+        assert_equal_float(color.alpha, 0.50196)
+        self.assertEqual(color.hex_code, "#ffff0080")
+        assert_equal_float(color.hsv, (0.16666, 1.0, 1.0))
+        self.assertEqual(color.name, "yellow")
+        assert_equal_float(color.rgb, (1.0, 1.0, 0.0))
+        assert_equal_float(color.rgba, (1.0, 1.0, 0.0, 0.50196))
+
+        # named color
+        color.parse("blue")  # pure blue
+        assert_equal_float(color.alpha, 0.50196)
+        self.assertEqual(color.hex_code, "#0000ff80")
+        assert_equal_float(color.hsv, (0.66666, 1.0, 1.0))
+        self.assertEqual(color.name, "blue")
+        assert_equal_float(color.rgb, (0.0, 0.0, 1.0))
+        assert_equal_float(color.rgba, (0.0, 0.0, 1.0, 0.50196))
+
+        # rgb
+        color.parse((1, 0, 1))  # magenta
+        assert_equal_float(color.alpha, 0.50196)
+        self.assertEqual(color.hex_code, "#ff00ff80")
+        assert_equal_float(color.hsv, (0.83333, 1.0, 1.0))
+        self.assertEqual(color.name, "fuchsia")
+        assert_equal_float(color.rgb, (1.0 ,0.0, 1.0))
+        assert_equal_float(color.rgba, (1.0, 0.0, 1.0, 0.50196))
+
+        # rgba
+        color.parse((0.0, 1.0, 1.0, 0.6))  # cyan, 60% opacity
+        assert_equal_float(color.alpha, 0.6)
+        self.assertEqual(color.hex_code, "#00ffff99")
+        assert_equal_float(color.hsv, (0.5, 1.0, 1.0))
+        self.assertEqual(color.name, "aqua")
+        assert_equal_float(color.rgb, (0.0, 1.0, 1.0))
+        assert_equal_float(color.rgba, (0.0, 1.0, 1.0, 0.6))
+
+        # errors
         bad_color_type = 12345
         bad_color_value = "this is not a color-like"
         bad_space_type = 42
         bad_space_value = "this is an invalid color space"
 
         # bad_color_type
-        color = DynamicColor("red")
         with self.assertRaises(ValueError) as cm:
             color.parse(bad_color_type)
         err_msg = ("[DynamicColor.parse] could not parse color")

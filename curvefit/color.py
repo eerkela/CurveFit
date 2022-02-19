@@ -63,12 +63,13 @@ BLEND_MODES = {
     "lighten": max
 }
 
-
+@lru_cache(maxsize=128)
 def to_rgba(
     color_like: str | tuple[NUMERIC, ...] | DynamicColor,
-    space: str = "rgb") -> tuple[float, float, float]:
+    alpha: NUMERIC = 1.0,
+    space: str = "rgb") -> tuple[float, float, float, tuple]:
     """Converts a color-like object to a tuple of RGBA values.
-    
+
     A color-like object can be any of:
         #. a previously existing DynamicColor object
         #. a named color string (e.g. `'white'`)
@@ -86,6 +87,9 @@ def to_rgba(
     :param colorlike: a DynamicColor or color-like string or tuple of
         `NUMERICS` that can be coerced into a DynamicColor object
     :type colorlike: str | tuple[NUMERIC, ...] | DynamicColor
+    :param alpha: the alpha value to use if `color_like` does not already
+        have one.
+    :type alpha: NUMERIC
     :param space: the color space to use when interpreting ambiguous tuples,
         defaults to "rgb"
     :type space: str, optional
@@ -101,38 +105,38 @@ def to_rgba(
                    f"the following values: {allowed_spaces} (received: "
                    f"{repr(space)})")
         raise ValueError(err_msg)
-    
+
     if isinstance(color_like, DynamicColor):
         return color_like.rgba
-    
+
     if isinstance(color_like, str):
         if color_like in NAMED_COLORS:
-            return hex_to_rgba(NAMED_COLORS[color_like])
-        if (color_like[0] == "#" and
-            all(c in hexdigits for c in color_like[1:])):
+            return hex_to_rgba(NAMED_COLORS[color_like], alpha=alpha)
+        elif (color_like[0] == "#" and
+              all(c in hexdigits for c in color_like[1:])):
             if len(color_like) == 7:
-                return hex_to_rgba(color_like, alpha=1.0)
+                return hex_to_rgba(color_like, alpha=alpha)
             if len(color_like) == 9:
                 return hex_to_rgba(color_like)
-    
+
     if isinstance(color_like, tuple):
         if (all(isinstance(v, NUMERIC_TYPECHECK) for v in color_like) and
-                all(0 <= v <= 1 for v in color_like)):
+            all(0 <= v <= 1 for v in color_like)):
             if space == "rgb":
                 if len(color_like) == 3:
-                    return color_like + (1.,)
+                    return color_like + (alpha,)
                 if len(color_like) == 4:
                     return color_like
             else:
                 if len(color_like) == 3:
-                    return hsv_to_rgb(color_like) + (1.,)
-    
-    err_msg = (f"[{error_trace()}] `color_like` must be a string referencing "
-               f"a named color ('white') or hex code of the form "
-               f"'#rrggbb[aa]', or a tuple of numeric values between 0 and 1, "
-               f"representing either an `(r, g, b)`, `(h, s, v)` or "
-               f"`(r, g, b, a)` color specification (received: "
-               f"{repr(color_like)})")
+                    return hsv_to_rgb(color_like) + (alpha,)
+
+    err_msg = (f"[{error_trace()}] `color_like` must be a string "
+                f"referencing a named color ('white') or hex code of the "
+                f"form '#rrggbb[aa]', or a tuple of numeric values between "
+                f"0 and 1, representing either an `(r, g, b)`, `(h, s, v)` "
+                f"or `(r, g, b, a)` color specification (received: "
+                f"{repr(color_like)})")
     raise ValueError(err_msg)
 
 
@@ -176,8 +180,9 @@ class DynamicColor:
 
     def __init__(self,
                  color: str | tuple[NUMERIC, ...],
+                 alpha: NUMERIC | None = None,
                  space: str = "rgb"):
-        self.parse(color, space=space)
+        self.parse(color, alpha=alpha, space=space)
 
     @callback_property
     def alpha(self) -> float:
@@ -594,10 +599,16 @@ class DynamicColor:
     def parse(
         self,
         color_like: str | tuple[NUMERIC, ...] | DynamicColor,
+        alpha: NUMERIC | None = None,
         space: str = "rgb") -> None:
         """Parses a color-like object, setting the current color to match."""
         try:
-            self.rgba = to_rgba(color_like, space=space)
+            if alpha is None:
+                if hasattr(self, "_rgba"):
+                    alpha = self.alpha
+                else:
+                    alpha = 1.0
+            self.rgba = to_rgba(color_like, alpha=alpha, space=space)
         except ValueError as exc:
             err_msg = f"[{error_trace(self)}] could not parse color"
             raise ValueError(err_msg) from exc

@@ -4,7 +4,7 @@ import matplotlib as mpl
 from matplotlib.font_manager import findfont, findSystemFonts, FontProperties, get_font
 
 from curvefit import NUMERIC, NUMERIC_TYPECHECK, error_trace
-from curvefit.callback import add_callback, callback_property
+from curvefit.callback import add_callback, callback_property, callbacks
 from curvefit.color import DynamicColor
 
 
@@ -59,10 +59,11 @@ class DynamicText:
                             "center_baseline"}
         if not isinstance(new_alignment, (str, tuple)):
             err_msg = (f"[{error_trace(self)}] `alignment` must be a string "
-                       f"or tuple of string `(horizontal, vertical)` with one "
-                       f"of the following values: (horizontal) "
-                       f"{allowed_horizontal}, (vertical) {allowed_vertical}, "
-                       f"(received object of type: {type(new_alignment)})")
+                       f"or tuple of strings `(horizontal, vertical)` with one "
+                       f"of the following horizontal values: "
+                       f"{allowed_horizontal}, and/or one of the following "
+                       f"vertical values {allowed_vertical} (received object "
+                       f"of type: {type(new_alignment)})")
             raise TypeError(err_msg)
         if isinstance(new_alignment, tuple):
             horizontal = new_alignment[0]
@@ -102,7 +103,6 @@ class DynamicText:
     @alpha.setter
     def alpha(self, new_alpha: NUMERIC) -> None:
         self._color.alpha = new_alpha
-        
 
     @callback_property
     def color(self) -> DynamicColor:
@@ -112,7 +112,9 @@ class DynamicText:
     def color(
         self,
         new_color: str | tuple[NUMERIC, ...] | DynamicColor) -> None:
-        self._color.parse(new_color)
+        old_callbacks = callbacks(self._color)
+        self._color = DynamicColor(new_color, alpha=self.alpha)
+        add_callback(self._color, old_callbacks)
 
     @callback_property
     def font(self) -> str:

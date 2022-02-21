@@ -14,8 +14,8 @@ assert_equal_float = partial(np.testing.assert_almost_equal, decimal=3)
 
 class DynamicColorBasicTests(unittest.TestCase):
 
-    def test_basic_init(self):
-        # hex code (no alpha)
+    def test_basic_init_no_alpha(self):
+        # hex code
         color = DynamicColor("#ff0000")  # pure red
         assert_equal_float(color.alpha, 1.0)
         self.assertEqual(color.hex_code, "#ff0000ff")
@@ -23,15 +23,6 @@ class DynamicColorBasicTests(unittest.TestCase):
         self.assertEqual(color.name, "red")
         assert_equal_float(color.rgb, (1.0, 0.0, 0.0))
         assert_equal_float(color.rgba, (1.0, 0.0, 0.0, 1.0))
-
-        # hex code (with alpha)
-        color = DynamicColor("#00ff0080")  # pure green
-        assert_equal_float(color.alpha, 0.50196)
-        self.assertEqual(color.hex_code, "#00ff0080")
-        assert_equal_float(color.hsv, (0.33333, 1.0, 1.0))
-        self.assertEqual(color.name, 'lime')
-        assert_equal_float(color.rgb, (0.0, 1.0, 0.0))
-        assert_equal_float(color.rgba, (0.0, 1.0, 0.0, 0.50196))
 
         # hsv
         color = DynamicColor((0.16666666, 1.0, 1.0), space="hsv")  # yellow
@@ -59,6 +50,34 @@ class DynamicColorBasicTests(unittest.TestCase):
         self.assertEqual(color.name, "fuchsia")
         assert_equal_float(color.rgb, (1.0 ,0.0, 1.0))
         assert_equal_float(color.rgba, (1.0, 0.0, 1.0, 1.0))
+
+    def test_basic_init_with_alpha(self):
+        # hex code
+        color = DynamicColor("#00ff0080")  # pure green
+        assert_equal_float(color.alpha, 0.50196)
+        self.assertEqual(color.hex_code, "#00ff0080")
+        assert_equal_float(color.hsv, (0.33333, 1.0, 1.0))
+        self.assertEqual(color.name, 'lime')
+        assert_equal_float(color.rgb, (0.0, 1.0, 0.0))
+        assert_equal_float(color.rgba, (0.0, 1.0, 0.0, 0.50196))
+
+        # hsv (with alpha=)
+        color = DynamicColor((0.16666666, 1.0, 1.0), alpha=0.8, space="hsv")
+        assert_equal_float(color.alpha, 0.8)
+        self.assertEqual(color.hex_code, "#ffff00cc")
+        assert_equal_float(color.hsv, (0.16666, 1.0, 1.0))
+        self.assertEqual(color.name, "yellow")
+        assert_equal_float(color.rgb, (1.0, 1.0, 0.0))
+        assert_equal_float(color.rgba, (1.0, 1.0, 0.0, 0.8))
+
+        # named color (with alpha=)
+        color = DynamicColor("blue", alpha=0.6)  # pure blue
+        assert_equal_float(color.alpha, 0.6)
+        self.assertEqual(color.hex_code, "#0000ff99")
+        assert_equal_float(color.hsv, (0.66666, 1.0, 1.0))
+        self.assertEqual(color.name, "blue")
+        assert_equal_float(color.rgb, (0.0, 0.0, 1.0))
+        assert_equal_float(color.rgba, (0.0, 0.0, 1.0, 0.6))
 
         # rgba
         color = DynamicColor((0.0, 1.0, 1.0, 0.6))  # cyan, 60% opacity
@@ -193,12 +212,13 @@ class DynamicColorBasicTests(unittest.TestCase):
         assert_equal_float(color.rgb, (0.0, 1.0, 1.0))
         assert_equal_float(color.rgba, (0.0, 1.0, 1.0, 0.6))
 
-        # errors
+    def test_parse_errors(self):
         bad_color_type = 12345
         bad_color_value = "this is not a color-like"
         bad_space_type = 42
         bad_space_value = "this is an invalid color space"
-
+        color = DynamicColor("green")
+        
         # bad_color_type
         with self.assertRaises(ValueError) as cm:
             color.parse(bad_color_type)
@@ -611,7 +631,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor("black")
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(TypeError) as cm:
             color.alpha = bad_type
         err_msg = ("[DynamicColor.alpha] `alpha` must be a numeric between 0 "
                    "and 1")
@@ -639,7 +659,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor("#000000")
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(TypeError) as cm:
             color.hex_code = bad_type
         err_msg = ("[DynamicColor.hex_code] `hex_code` must be a string of the "
                    "form '#rrggbb' or '#rrggbbaa'")
@@ -675,7 +695,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor((0, 0, 0), space="hsv")
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(TypeError) as cm:
             color.hsv = bad_type
         err_msg = ("[DynamicColor.hsv] `hsv` must be a length-3 tuple of "
                    "numerics between 0 and 1")
@@ -715,7 +735,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor("black")
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(TypeError) as cm:
             color.name = bad_type
         err_msg = ("[DynamicColor.name] `name` must be a string referencing a "
                    "key in `NAMED_COLORS`")
@@ -737,7 +757,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor((0, 0, 0))
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(TypeError) as cm:
             color.rgb = bad_type
         err_msg = ("[DynamicColor.rgb] `rgb` must be a length-3 tuple of "
                    "numerics between 0 and 1")
@@ -780,7 +800,7 @@ class DynamicColorErrorTests(unittest.TestCase):
 
         # bad_type
         color = DynamicColor((0, 0, 0, 1.0))
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(TypeError) as cm:
             color.rgba = bad_type
         err_msg = ("[DynamicColor.rgba] `rgba` must be a length-4 tuple of "
                    "numerics between 0 and 1")

@@ -47,23 +47,6 @@ for k, v in mpl.colors.get_named_colors_mapping().items():
             COLORS_NAMED[v].sort(key=len)  # prefer colors without extensions
 
 
-BLEND_MODES = {
-    "add": lambda b, t: min(b + t, 1.0),
-    "subtract": lambda b, t: max(b - t, 0.0),
-    "difference": lambda b, t: abs(b - t),
-    "multiply": lambda b, t: b * t,
-    "divide": lambda b, t: min(b / t, 1.0) if t > 0 else 1.0,
-    "burn": lambda b, t: max(1 - (1 - b) / t, 0.0) if t > 0 else 0.0,
-    "dodge": lambda b, t: min(b / (1 - t), 1.0) if t < 1 else 1.0,
-    "screen": lambda b, t: 1 - (1 - b) * (1 - t),
-    "overlay": lambda b, t: 2*b*t if b < 0.5 else 1 - 2 * (1 - b) * (1 - t),
-    "hard light": lambda b, t: 2*b*t if t < 0.5 else 1 - 2 * (1 - b) * (1 - t),
-    "soft light": lambda b, t: (1 - 2 * t) * b**2 + 2 * t * b,
-    "darken": min,
-    "lighten": max
-}
-
-@lru_cache(maxsize=128)
 def to_rgba(
     color_like: str | tuple[NUMERIC, ...] | DynamicColor,
     alpha: NUMERIC = 1.0,
@@ -211,8 +194,12 @@ class DynamicColor:
         :raises ValueError: if `new_alpha` is not `NUMERIC` or not in the range
             `[0, 1]`
         """
-        if (not isinstance(new_alpha, NUMERIC_TYPECHECK) or
-            not 0 <= new_alpha <= 1):
+        if not isinstance(new_alpha, NUMERIC_TYPECHECK):
+            err_msg = (f"[{error_trace(self)}] `alpha` must be a numeric "
+                       f"between 0 and 1 (received object of type: "
+                       f"{type(new_alpha)})")
+            raise TypeError(err_msg)
+        if not 0 <= new_alpha <= 1:
             err_msg = (f"[{error_trace(self)}] `alpha` must be a numeric "
                        f"between 0 and 1 (received: {repr(new_alpha)})")
             raise ValueError(err_msg)
@@ -250,8 +237,12 @@ class DynamicColor:
         :raises ValueError: if `new_hex` isn't a string or isn't a valid hex
             code
         """
-        if (not isinstance(new_hex, str) or
-            (len(new_hex) != 7 and len(new_hex) != 9) or
+        if not isinstance(new_hex, str):
+            err_msg = (f"[{error_trace(self)}] `hex_code` must be a string "
+                       f"of the form '#rrggbb' or '#rrggbbaa' (received "
+                       f"object of type: {type(new_hex)})")
+            raise TypeError(err_msg)
+        if ((len(new_hex) != 7 and len(new_hex) != 9) or
             new_hex[0] != "#" or
             any(c not in hexdigits for c in new_hex[1:])):
             err_msg = (f"[{error_trace(self)}] `hex_code` must be a string "
@@ -294,8 +285,12 @@ class DynamicColor:
         :raises ValueError: if `new_hsv` isn't a tuple, is not length-3, or
             doesn't contain `NUMERIC`s in the range `[0, 1]`
         """
-        if (not isinstance(new_hsv, tuple) or
-            len(new_hsv) != 3 or
+        if not isinstance(new_hsv, tuple):
+            err_msg = (f"[{error_trace(self)}] `hsv` must be a length-3 tuple "
+                       f"of numerics between 0 and 1 (received object of "
+                       f"type: {type(new_hsv)})")
+            raise TypeError(err_msg)
+        if (len(new_hsv) != 3 or
             any(not isinstance(v, NUMERIC_TYPECHECK) for v in new_hsv) or
             any(not 0 <= v <= 1 for v in new_hsv)):
             err_msg = (f"[{error_trace(self)}] `hsv` must be a length-3 tuple "
@@ -338,8 +333,13 @@ class DynamicColor:
         :raises ValueError: if `new_color` isn't a string, or isn't recognized
             as a named color
         """
+        if not isinstance(new_color, str):
+            err_msg = (f"[{error_trace(self)}] `name` must be a string "
+                       f"referencing a key in `NAMED_COLORS` (received object "
+                       f"of type: {type(new_color)})")
+            raise TypeError(err_msg)
         hex_code = NAMED_COLORS.get(new_color, None)
-        if not isinstance(new_color, str) or not hex_code:
+        if not hex_code:
             err_msg = (f"[{error_trace(self)}] `name` must be a string "
                        f"referencing a key in `NAMED_COLORS` (received: "
                        f"{repr(new_color)})")
@@ -380,8 +380,12 @@ class DynamicColor:
         :raises ValueError: if `new_rgb` isn't a tuple, is not length-3, or
             doesn't contain `NUMERIC`s in the range `[0, 1]`
         """
-        if (not isinstance(new_rgb, tuple) or
-            len(new_rgb) != 3 or
+        if not isinstance(new_rgb, tuple):
+            err_msg = (f"[{error_trace(self)}] `rgb` must be a length-3 tuple "
+                       f"of numerics between 0 and 1 (received object of "
+                       f"type: {type(new_rgb)})")
+            raise TypeError(err_msg)
+        if (len(new_rgb) != 3 or
             any(not isinstance(v, NUMERIC_TYPECHECK) for v in new_rgb) or
             any(not 0 <= v <= 1 for v in new_rgb)):
             err_msg = (f"[{error_trace(self)}] `rgb` must be a length-3 tuple "
@@ -425,13 +429,17 @@ class DynamicColor:
         :raises ValueError: if `new_rgba` isn't a tuple, is not length-4, or
             doesn't contain `NUMERIC`s in the range `[0, 1]`
         """
-        if (not isinstance(new_rgba, tuple) or
-            len(new_rgba) != 4 or
+        if not isinstance(new_rgba, tuple):
+            err_msg = (f"[{error_trace(self)}] `rgba` must be a length-4 "
+                       f"tuple of numerics between 0 and 1 (received object "
+                       f"of type: {type(new_rgba)})")
+            raise TypeError(err_msg)
+        if (len(new_rgba) != 4 or
             any(not isinstance(v, NUMERIC_TYPECHECK) for v in new_rgba) or
             any(not 0 <= v <= 1 for v in new_rgba)):
             err_msg = (f"[{error_trace(self)}] `rgba` must be a length-4 "
                        f"tuple of numerics between 0 and 1 (received: "
-                       f"{new_rgba})")
+                       f"{repr(new_rgba)})")
             raise ValueError(err_msg)
         self._rgba = new_rgba
 
@@ -511,10 +519,25 @@ class DynamicColor:
             If `in_place=True`, this is a reference to `self`.
         :rtype: DynamicColor
         """
-        if not isinstance(mode, str) or mode not in BLEND_MODES:
+        blend_modes = {
+            "add": lambda b, t: min(b+t, 1.0),
+            "subtract": lambda b, t: max(b-t, 0.0),
+            "difference": lambda b, t: abs(b-t),
+            "multiply": lambda b, t: b*t,
+            "divide": lambda b, t: min(b/t, 1.0) if t > 0 else 1.0,
+            "burn": lambda b, t: max(1-(1-b)/t, 0.0) if t > 0 else 0.0,
+            "dodge": lambda b, t: min(b/(1-t), 1.0) if t < 1 else 1.0,
+            "screen": lambda b, t: 1-(1-b)*(1-t),
+            "overlay": lambda b, t: 2*b*t if b < 0.5 else 1-2*(1-b)*(1-t),
+            "hard light": lambda b, t: 2*b*t if t < 0.5 else 1-2*(1-b)*(1-t),
+            "soft light": lambda b, t: (1-2*t)*b**2 + 2*t*b,
+            "darken": min,
+            "lighten": max
+        }
+        if mode not in blend_modes:
             err_msg = (f"[{error_trace(self)}] `mode` must be a string with "
                        f"one of the following values: "
-                       f"{list(BLEND_MODES.keys())} (received: "
+                       f"{list(blend_modes.keys())} (received: "
                        f"{repr(mode)})")
             raise ValueError(err_msg)
         try:
@@ -522,7 +545,7 @@ class DynamicColor:
         except ValueError as exc:
             err_msg = f"[{error_trace(self)}] could not blend colors"
             raise ValueError(err_msg) from exc
-        new_rgb = tuple(map(BLEND_MODES[mode], self.rgb, other_rgb))
+        new_rgb = tuple(map(blend_modes[mode], self.rgb, other_rgb))
         if in_place:
             self.rgb = new_rgb
             return self
@@ -567,7 +590,7 @@ class DynamicColor:
         :rtype: float
         """
         try:
-            other_rgb = to_rgba(color_like, space=space)[0:3]
+            other_rgb = to_rgba(color_like, space=space)[:3]
         except ValueError as exc:
             err_msg = f"[{error_trace(self)}] could not compute distance"
             raise ValueError(err_msg) from exc
@@ -609,9 +632,9 @@ class DynamicColor:
                 else:
                     alpha = 1.0
             self.rgba = to_rgba(color_like, alpha=alpha, space=space)
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             err_msg = f"[{error_trace(self)}] could not parse color"
-            raise ValueError(err_msg) from exc
+            raise type(exc)(err_msg) from exc
 
     def properties(self) -> dict[str, str | tuple[float, ...]]:
         """Returns a property dictionary that lists all the mutable attributes
@@ -644,7 +667,9 @@ class DynamicColor:
         self,
         color_like: str | tuple[NUMERIC, ...] | DynamicColor
     ) -> bool:
-        """Distance-based comparison for DynamicColor equality."""
+        """Distance-based comparison for DynamicColor equality.  Be careful of
+        reference semantics if comparing DynamicColors across time.
+        """
         return isclose(self.distance(color_like), 0)
 
     def __hash__(self) -> int:

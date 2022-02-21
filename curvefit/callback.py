@@ -14,6 +14,8 @@ from typing import Callable, Iterable, Union
 import weakref
 from weakref import WeakKeyDictionary
 
+from curvefit import error_trace
+
 
 class CallbackContainer(object):
     """
@@ -82,7 +84,8 @@ class CallbackContainer(object):
                 # just check here that the weakrefs were resolved
                 if func is None or inst is None:
                     continue
-                yield partial(func, inst)
+                yield func.__get__(inst)  # bound method rather than partial
+                # yield partial(func, inst)  # original source
             else:
                 yield callback[0]
 
@@ -202,6 +205,9 @@ class CallbackProperty(object):
         """
         return not self._disabled.get(instance, False)
 
+    def callbacks(self, instance):
+        return [signature for signature in self._callbacks.get(instance, [])]
+
     def add_callback(self, instance, func, priority=0):
         """
         Add a callback to a specific instance that manages this property
@@ -228,12 +234,17 @@ class CallbackProperty(object):
         func : func
             The callback function to remove
         """
-        for cb in self._callbacks:
-            if instance not in cb:
-                continue
-            if func in cb[instance]:
-                cb[instance].remove(func)
-                return
+        container = self._callbacks.get(instance, [])
+        if func in container:
+            container.remove(func)
+            return
+        # this is the original source code:
+        # for cb in self._callbacks:
+        #     if instance not in cb:
+        #         continue
+        #     if func in cb[instance]:
+        #         cb[instance].remove(func)
+        #         return
         raise ValueError("Callback function not found: %s" % func)
 
     def clear_callbacks(self, instance):
@@ -247,71 +258,260 @@ class CallbackProperty(object):
             self._disabled.pop(instance)
 
 
+def callbacks(
+    instance,
+    prop_name: str | None = None) -> list[Callable] | dict[str, Callable]:
+    """Return a list of callback functions attached to an instance property."""
+    if prop_name is None:  # return callback dictionary for entire instance
+        callbacks = {}
+        for prop_name in dir(instance):
+            if hasattr(type(instance), prop_name):
+                prop_val = getattr(type(instance), prop_name)
+                if isinstance(prop_val, CallbackProperty):
+                    callbacks[prop_name] = prop_val.callbacks(instance)
+        return callbacks
+
+    # return callbacks for specific property
+    if not isinstance(prop_name, str):
+        err_msg = (f"[{error_trace()}] `prop_name` must be a string "
+                   f"(received: {repr(prop_name)})")
+        raise TypeError(err_msg)
+    prop = getattr(type(instance), prop_name)
+    if not isinstance(prop, CallbackProperty):
+        err_msg = (f"[{error_trace()}] {prop_name} is not a CallbackProperty")
+        raise ValueError(err_msg)
+    return prop.callbacks(instance)
+
+
 def add_callback(instance,
-                 prop_name: Union[str, Iterable[str]],
-                 callback: Callable,
+                 props: str | Iterable[str] | dict[str, Callable],
+                 callback: Callable | Iterable[Callable] | None = None,
                  priority: int = 0) -> None:
     """
-    Attach a callback function to a property in an instance
+    Attach a callback function to a property in an instance.
+
+    Supports multiple assignment via dictionaries and/or iterables of property
+    names/callback functions.  If using a dictionary to perform multiple
+    assignment, the `callback` field should be omitted, and the values of
+    `props` should reference the callback function(s) to use for each property.
+
     Parameters
     ----------
-    instance
-        The instance to add the callback to
-    prop_name : str
-        Name of callback property in `instance`
-    callback : func
-        The callback function to add
-    priority : int, optional
+    :param instance:
+        The instance to add the callback(s) to
+    :type instance: Any
+    :param props:
+        Name or iterable of names of callback properties in `instance`, or a
+        dictionary of property names and callback functions to add
+    :type props: str | Iterable[str] | dict[str, Callable]
+    :param callback:
+        The callback function(s) to add.  If using a callback dictionary, leave
+        this blank
+    :type callback: Callable | Iterable[Callable] | None, defaults to None
+    :param priority:
         This can optionally be used to force a certain order of execution of
         callbacks (larger values indicate a higher priority).
+    :type priority: int, defaults to 0
+
     Examples
     --------
     ::
         class Foo:
             bar = CallbackProperty(0)
-        def callback(value):
+
+            @callback_property
+            def baz(self):
+                return self._baz
+
+            @baz.setter
+            def baz(self, new_baz):
+                self._baz = new_baz
+
+            def callback(self, instance):
+                pass
+
+        def callback(instance):
             pass
+
         f = Foo()
-        add_callback(f, 'bar', callback)
+        add_callback(f, 'bar', callback)  # single assignment
+        add_callback(f, 'baz', f.callback)  # method callbacks
+        add_callback(f, ['bar', 'baz'], callback)  # multiple properties
+        add_callback(f, 'bar', [callback, f.callback])  # multiple callbacks
+        add_callback(f, {'bar': callback, 'baz': f.callback})  # dict-based
     """
-    if isinstance(prop_name, str):
-        prop = getattr(type(instance), prop_name)
-        if not isinstance(prop, CallbackProperty):
-            raise TypeError(f"{prop_name} is not a CallbackProperty")
-        prop.add_callback(instance, callback, priority=priority)
-    else:  # prop_name is iterable
-        for pname in prop_name:
-            prop = getattr(type(instance), pname)
-            if not isinstance(prop, CallbackProperty):
-                raise TypeError(f"{pname} is not a CallbackProperty")
-            prop.add_callback(instance, callback, priority=priority)
+    if isinstance(props, str):  # single property, one or more callbacks
+        if callback is None:
+            err_msg = (f"[{error_trace()}] `callback` must not be None")
+            raise RuntimeError(err_msg)
+        cb_prop = getattr(type(instance), props)
+        if not isinstance(cb_prop, CallbackProperty):
+            err_msg = (f"[{error_trace()}] {prop_name} is not a "
+                       f"CallbackProperty")
+            raise ValueError(err_msg)
+        if isinstance(callback, Iterable):
+            for cb_func in callback:
+                if not isinstance(cb_func, Callable):
+                    err_msg = (f"[{error_trace()}] callback function(s) must "
+                               f"be callable (received: {repr(cb_func)})")
+                    raise TypeError(err_msg)
+                cb_prop.add_callback(instance, cb_func, priority=priority)
+        else:
+            if not isinstance(callback, Callable):
+                err_msg = (f"[{error_trace()}] callback function(s) must be "
+                           f"callable (received: {repr(cb_func)})")
+                raise TypeError(err_msg)
+            cb_prop.add_callback(instance, callback, priority=priority)
+
+    elif isinstance(props, dict):  # multiple properties, multiple callbacks
+        if callback is not None:
+            err_msg = (f"[{error_trace()}] when passing a callback dictionary, "
+                       f"the `callback` argument should not be used")
+            raise RuntimeError(err_msg)
+        for prop_name, func in props.items():
+            if not isinstance(prop_name, str):
+                err_msg = (f"[{error_trace()}] dictionary keys must be "
+                           f"strings (received: {repr(prop_name)})")
+                raise TypeError(err_msg)
+            cb_prop = getattr(type(instance), prop_name)
+            if not isinstance(cb_prop, CallbackProperty):
+                err_msg = (f"[{error_trace()}] {prop_name} is not a "
+                           f"CallbackProperty")
+                raise ValueError(err_msg)
+            if isinstance(func, Iterable):
+                for cb_func in func:
+                    if not isinstance(cb_func, Callable):
+                        err_msg = (f"[{error_trace()}] callback function(s) "
+                                   f"must be callable (received: "
+                                   f"{repr(cb_func)})")
+                        raise TypeError(err_msg)
+                    cb_prop.add_callback(instance, cb_func, priority=priority)
+            else:
+                if not isinstance(func, Callable):
+                    err_msg = (f"[{error_trace()}] callback function(s) must "
+                               f"be callable (received: {repr(cb_func)})")
+                    raise TypeError(err_msg)
+                cb_prop.add_callback(instance, func, priority=priority)
+
+    elif isinstance(props, Iterable):  # multiple properties, single callback
+        for prop_name in props:
+            if not isinstance(prop_name, str):
+                err_msg = (f"[{error_trace()}] property name must be a "
+                           f"string (received: {repr(prop_name)})")
+                raise TypeError(err_msg)
+            cb_prop = getattr(type(instance), prop_name)
+            if not isinstance(cb_prop, CallbackProperty):
+                err_msg = (f"[{error_trace()}] {prop_name} is not a "
+                           f"CallbackProperty")
+                raise ValueError(err_msg)
+            cb_prop.add_callback(instance, callback, priority=priority)
+
+    else:  # not recognized
+        err_msg = (f"[{error_trace()}] could not interpret `props` "
+                   f"(received: {repr(props)})")
+        raise TypeError(err_msg)
 
 
 def remove_callback(instance,
-                    prop_name: Union[str, Iterable[str]],
-                    callback: Callable) -> None:
+                    props: str | Iterable[str] | dict[str, Callable],
+                    callback: Callable | Iterable[Callable] | None) -> None:
     """
-    Remove a callback function from a property in an instance
+    Remove a callback function from a property in an instance.
+
+    Supports multiple removal via dictionaries and/or iterables of property
+    names/callback functions.  If using a dictionary to perform multiple
+    removal, the `callback` field should be omitted, and the values of `props`
+    should reference the callback function(s) to remove for each property.
+
     Parameters
     ----------
-    instance
-        The instance to detach the callback from
-    prop : str
-        Name of callback property in `instance`
-    callback : func
-        The callback function to remove
+    :param instance:
+        The instance to remove the callback(s) to
+    :type instance: Any
+    :param props:
+        Name or iterable of names of callback properties in `instance`, or a
+        dictionary of property names and callback functions to remove
+    :type props: str | Iterable[str] | dict[str, Callable]
+    :param callback:
+        The callback function(s) to remove.  If using a callback dictionary,
+        leave this blank
+    :type callback: Callable | Iterable[Callable] | None, defaults to None
     """
-    if isinstance(prop_name, str):
-        prop = getattr(type(instance), prop_name)
-        if not isinstance(prop, CallbackProperty):
-            raise TypeError(f"{prop_name} is not a CallbackProperty")
-        prop.remove_callback(instance, callback)
-    else:
-        for pname in prop_name:
-            prop = getattr(type(instance), pname)
-            if not isinstance(prop, CallbackProperty):
-                raise TypeError(f"{pname} is not a CallbackProperty")
-            prop.remove_callback(instance, callback)
+    if isinstance(props, str):  # single property, one or more callbacks
+        if callback is None:
+            err_msg = (f"[{error_trace()}] `callback` must not be None")
+            raise RuntimeError(err_msg)
+        cb_prop = getattr(type(instance), props)
+        if not isinstance(cb_prop, CallbackProperty):
+            err_msg = (f"[{error_trace()}] {prop_name} is not a "
+                       f"CallbackProperty")
+            raise ValueError(err_msg)
+        if isinstance(callback, Iterable):
+            for cb_func in callback:
+                if not isinstance(cb_func, Callable):
+                    err_msg = (f"[{error_trace()}] callback function(s) must "
+                               f"be callable (received: {repr(cb_func)})")
+                    raise TypeError(err_msg)
+                cb_prop.remove_callback(instance, cb_func)
+        else:
+            if not isinstance(callback, Callable):
+                err_msg = (f"[{error_trace()}] callback function(s) must be "
+                           f"callable (received: {repr(cb_func)})")
+                raise TypeError(err_msg)
+            cb_prop.remove_callback(instance, callback)
+
+    elif isinstance(props, dict):  # multiple properties, multiple callbacks
+        if callback is not None:
+            err_msg = (f"[{error_trace()}] when passing a callback dictionary, "
+                       f"the `callback` argument should not be used")
+            raise RuntimeError(err_msg)
+        for prop_name, func in props.items():
+            if not isinstance(prop_name, str):
+                err_msg = (f"[{error_trace()}] dictionary keys must be "
+                           f"strings (received: {repr(prop_name)})")
+                raise TypeError(err_msg)
+            cb_prop = getattr(type(instance), prop_name)
+            if not isinstance(cb_prop, CallbackProperty):
+                err_msg = (f"[{error_trace()}] {prop_name} is not a "
+                           f"CallbackProperty")
+                raise ValueError(err_msg)
+            if isinstance(func, Iterable):
+                for cb_func in func:
+                    if not isinstance(cb_func, Callable):
+                        err_msg = (f"[{error_trace()}] callback function(s) "
+                                   f"must be callable (received: "
+                                   f"{repr(cb_func)})")
+                        raise TypeError(err_msg)
+                    cb_prop.remove_callback(instance, cb_func)
+            else:
+                if not isinstance(func, Callable):
+                    err_msg = (f"[{error_trace()}] callback function(s) must "
+                               f"be callable (received: {repr(cb_func)})")
+                    raise TypeError(err_msg)
+                cb_prop.remove_callback(instance, func)
+
+    elif isinstance(props, Iterable):  # multiple properties, single callback
+        for prop_name in props:
+            if not isinstance(prop_name, str):
+                err_msg = (f"[{error_trace()}] property name must be a "
+                           f"string (received: {repr(prop_name)})")
+                raise TypeError(err_msg)
+            cb_prop = getattr(type(instance), prop_name)
+            if not isinstance(cb_prop, CallbackProperty):
+                err_msg = (f"[{error_trace()}] {prop_name} is not a "
+                           f"CallbackProperty")
+                raise ValueError(err_msg)
+            cb_prop.remove_callback(instance, callback)
+
+    else:  # not recognized
+        err_msg = (f"[{error_trace()}] could not interpret `props` "
+                   f"(received: {repr(props)})")
+        raise TypeError(err_msg)
+
+
+def clear_callbacks(instance):
+    """Clears all callbacks associated with `instance`"""
+    remove_callback(instance, callbacks(instance))
 
 
 def callback_property(getter: Callable) -> CallbackProperty:
@@ -326,7 +526,7 @@ def callback_property(getter: Callable) -> CallbackProperty:
             def x(self, value):
                 self._x = value
     In simple cases with no getter or setter logic, it's easier to create a
-    :class:`~echo.CallbackProperty` directly::
+    :class:`~curvefit.CallbackProperty` directly::
         class Foo(object);
             x = CallbackProperty(initial_value)
     """

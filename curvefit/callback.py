@@ -1,24 +1,46 @@
-"""This module allows users to attach callback functions to property state
-changes.  One can do so either through an @dataclass-like interface, or by
-using the @callback_property decorator, which mimics the base python @property
-interface.
+"""This module allows users to easily attach callback functions to state
+changes of custom python objects, either through a `@dataclass`-like default
+interface, or by using an `@callback_property` decorator, which mimics the
+built-in `@property` interface for getter/setter logic.
 
-The content of this module is adapted from the fantastic 'echo' package
-developed by Chris Beaumont and Thomas Robitaille.  Source code for that
-package can be found here: https://github.com/glue-viz/echo
+The bones of this module were originally created by Chris Beaumont
+(https://github.com/ChrisBeaumont) and Thomas Robitaille
+(https://github.com/astrofrog), for their 'echo' package
+(https://github.com/glue-viz/echo).  The contents have been heavily adapted,
+but the core functionality was developed by them.
 """
 from __future__ import annotations
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable, Iterator
 import weakref
 
 from curvefit import error_trace
 
 
+"""
+TODO: write unit tests
+"""
+
+
 def callback_property(getter: Callable) -> CallbackProperty:
     """
     A decorator used to build a CallbackProperty, wrapping a getter method
-    just like @property.
+    just like the built-in @property.
 
+    Parameters
+    ----------
+    :param getter:
+        The getter method to associate with this CallbackProperty.
+    :type getter: Callable
+
+    Returns
+    -------
+    :returns:
+        A CallbackProperty, to which state-based callback functions can then
+        be attached (see :func:`~curvefit.add_callback`).
+    :rtype: CallbackProperty
+
+    Examples
+    --------
     ::
         class Foo(object):
 
@@ -32,7 +54,7 @@ def callback_property(getter: Callable) -> CallbackProperty:
 
     In simple cases with no getter or setter logic, it's easier to create a
     :class:`~curvefit.CallbackProperty` directly
-    
+
     ::
         class Foo(object);
             x = CallbackProperty(initial_value)
@@ -45,7 +67,7 @@ def callback_property(getter: Callable) -> CallbackProperty:
 
 def callbacks(
     instance,
-    prop_name: str | None = None) -> list[Callable] | dict[str, Callable]:
+    prop_name: str | None = None) -> list[Callable] | dict[str, list[Callable]]:
     """
     Return a list of callback functions attached to an instance property.  If
     `prop_name` is omitted, returns a dictionary whose keys represent the
@@ -56,12 +78,29 @@ def callbacks(
     Parameters
     ----------
     :param instance:
-        The instance to retrieve callbacks for
+        The instance to retrieve callbacks for.
     :type instance: Any
     :prop_name:
         The name of the property whose callbacks are to be retrieved.  If
         `None`, returns the entire callback dictionary for `instance`.
     :type prop_name: str | None, defaults to None
+
+    Returns
+    -------
+    :return:
+        A list of callback functions/methods for `prop_name`, or if `prop_name`
+        is omitted, a dictionary mapping the names of all the
+        CallbackProperties in `instance` to their corresponding list of bound
+        callback functions/methods.
+    :rtype: list[Callable] | dict[str, list[Callable]]
+
+    Raises
+    ------
+    :raises TypeError:
+        If `prop_name` is given and is not a string.
+    :raises ValueError:
+        If `prop_name` is given and does not point to a CallbackProperty within
+        `instance`.
     """
     if prop_name is None:  # return callback dictionary for entire instance
         callbacks = {}
@@ -100,20 +139,33 @@ def add_callback(instance,
     Parameters
     ----------
     :param instance:
-        The instance to add the callback(s) to
+        The instance to add the callback(s) to.
     :type instance: Any
     :param props:
         Name or iterable of names of callback properties in `instance`, or a
-        dictionary of property names and callback functions to add
+        dictionary of property names and callback functions to add.
     :type props: str | Iterable[str] | dict[str, Callable]
     :param callback:
         The callback function(s) to add.  If using a callback dictionary, leave
-        this blank
+        this blank.
     :type callback: Callable | Iterable[Callable] | None, defaults to None
     :param priority:
         This can optionally be used to force a certain order of execution of
         callbacks (larger values indicate a higher priority).
     :type priority: int, defaults to 0
+
+    Raises
+    ------
+    :raises TypeError:
+        If `props` is not a recognized type, or it contains non-string-based
+        property names, or not all callback functions are Callable.
+    :raises ValueError:
+        If the properties specified in `props` do not correspond to
+        CallbackProperties in the base class of `instance`.
+    :raises RuntimeError:
+        If the function signature is not as expected, for instance when a
+        callback function is omitted during single assignment, or when
+        `callback` is specified when performing dict-based multiple assignment.
 
     Examples
     --------
@@ -221,6 +273,46 @@ def remove_callback(instance,
         The callback function(s) to remove.  If using a callback dictionary,
         leave this blank
     :type callback: Callable | Iterable[Callable] | None, defaults to None
+
+    Raises
+    ------
+    :raises TypeError:
+        If `props` is not a recognized type, or it contains non-string-based
+        property names, or not all callback functions are Callable.
+    :raises ValueError:
+        If the properties specified in `props` do not correspond to
+        CallbackProperties in the base class of `instance`.
+    :raises RuntimeError:
+        If the function signature is not as expected, for instance when a
+        callback function is omitted during single removal, or when `callback`
+        is specified when performing dict-based multiple removal.
+
+    Examples
+    --------
+    ::
+        class Foo:
+            bar = CallbackProperty(0)
+
+            @callback_property
+            def baz(self):
+                return self._baz
+
+            @baz.setter
+            def baz(self, new_baz):
+                self._baz = new_baz
+
+            def callback(self, instance):
+                pass
+
+        def callback(instance):
+            pass
+
+        f = Foo()
+        remove_callback(f, 'bar', callback)  # single removal
+        remove_callback(f, 'baz', f.callback)  # method callbacks
+        remove_callback(f, ['bar', 'baz'], callback)  # multiple properties
+        remove_callback(f, 'bar', [callback, f.callback])  # multiple callbacks
+        remove_callback(f, {'bar': callback, 'baz': f.callback})  # dict-based
     """
     def get_cb_prop(name: str) -> CallbackProperty:
         if not isinstance(name, str):
@@ -282,17 +374,27 @@ def remove_callback(instance,
 
 def clear_callbacks(instance, *props: str) -> None:
     """
-    Clear all callbacks associated with specified properties of `instance`.
+    Clear all callbacks associated with specified properties of `instance`.  If
+    no properties are given, clears all callbacks associated with `instance`.
 
     Parameters
     ----------
     :param instance:
-        The instance to clear the callbacks from
+        The instance to clear the callbacks from.
     :type instance: Any
     :param props:
         Name or sequence of names of callback properties in `instance` to clear
-        callbacks for
+        callbacks for.
     :type props: str, optional
+
+    Raises
+    ------
+    :raises TypeError:
+        If `props` is not a recognized type, or it contains non-string-based
+        property names.
+    :raises ValueError:
+        If the properties specified in `props` do not correspond to
+        CallbackProperties in the base class of `instance`.
     """
     if len(props) > 0:
         for prop_name in props:
@@ -311,8 +413,38 @@ def clear_callbacks(instance, *props: str) -> None:
             raise type(exc)(err_msg) from exc
 
 
-def copy_callbacks(old_instance, new_instance, check_type: bool = True) -> None:
-    """Attach all callbacks associated with `old_instance` to `new_instance`"""
+def copy_callbacks(old_instance,
+                   new_instance,
+                   check_type: bool = True) -> None:
+    """
+    Copy all the callbacks associated with `old_instance` onto `new_instance`.
+
+    This is useful when setting properties that involve pass-by-reference
+    object definitions.  In order to maintain the state-change behavior of such
+    properties, one must usually construct a new object of the same type, then
+    transfer the callbacks associated with the old instance over to the new
+    one.  This function facilitates that, and should generally not be used in
+    any other context.
+
+    Parameters
+    ----------
+    :param old_instance:
+        The old object to copy the callbacks from.
+    :type old_instance: Any
+    :param new_instance:
+        The new object to add callbacks to.
+    :type new_instance: Any
+    :param check_type:
+        Specifies whether to check that `old_instance` and `new_instance` are
+        of the same type.  This is meant to ensure that the fields of both
+        objects match, but can be disabled if desired.
+    :type check_type: bool, defaults to True
+
+    Raises
+    ------
+    :raises TypeError:
+        If `check_type=True` and `type(old_instance) != type(new_instance)`.
+    """
     if check_type and not type(old_instance) == type(new_instance):
         err_msg = (f"[{error_trace()}] type of `old_instance` does not match "
                    f"that of `new_instance`({type(old_instance)} != "
@@ -327,44 +459,74 @@ class CallbackContainer:
     A list-like container for callback functions. We need to be careful with
     storing references to methods, because if a callback method is on a class
     which contains both the callback and a callback property, a circular
-    reference is created which results in a memory leak. Instead, we need to use
-    a weak reference which results in the callback being removed if the instance
-    is destroyed. This container class takes care of this automatically.
+    reference is created which results in a memory leak. Instead, we need to
+    use a weak reference which results in the callback being removed if the
+    instance is destroyed. This container class takes care of this
+    automatically.
     """
 
     def __init__(self):
         self.callbacks = []
+    
+    @staticmethod
+    def is_bound_method(func: Callable) -> bool:
+        """Check whether `func` is a naked function or a bound method"""
+        return (hasattr(func, '__func__') and
+                getattr(func, '__self__', None) is not None)
 
-    def clear(self):
-        self.callbacks[:] = []
-
-    def _wrap(self, value, priority=0):
+    def _wrap(self,
+              value: Callable,
+              priority: int = 0
+    ) -> (tuple(Callable, int) |
+          tuple(weakref.ref[Callable], weakref.ref[Any], int)):
         """
-        Given a function/method, this will automatically wrap a method using
-        weakref to avoid circular references.
+        Given a function or a method, this will automatically wrap a method
+        using weakref to avoid circular references.
         """
         if not callable(value):
             err_msg = "Only callable values can be stored in CallbackContainer"
             raise TypeError(err_msg)
-        elif self.is_bound_method(value):
+        if self.is_bound_method(value):
             # We are dealing with a bound method. Method references aren't
             # persistent, so instead we store a reference to the function
             # and instance.
-            value = (weakref.ref(value.__func__),
-                     weakref.ref(value.__self__, self._auto_remove),
-                     priority)
-        else:
-            value = (value, priority)
-        return value
+            return (weakref.ref(value.__func__),
+                    weakref.ref(value.__self__, self._auto_remove),
+                    priority)
+        return (value, priority)
 
-    def _auto_remove(self, method_instance):
-        # Called when weakref detects that the instance on which a method was
-        # defined has been garbage collected.
+    def _auto_remove(self, method_instance) -> None:
+        """
+        A callback function that is invoked when the instance to which a method
+        was bound has been garbage collected, removing it from the callback
+        container.
+        """
         for value in self.callbacks[:]:
             if isinstance(value, tuple) and value[1] is method_instance:
                 self.callbacks.remove(value)
 
-    def __contains__(self, value):
+    def append(self, value: Callable, priority: int = 0) -> None:
+        """Append a Callable with priority level `priority` to this container"""
+        self.callbacks.append(self._wrap(value, priority=priority))
+
+    def clear(self) -> None:
+        """Clear the callback references associated with this container."""
+        self.callbacks[:] = []
+
+    def remove(self, value: Callable) -> None:
+        """Remove a Callable from this container"""
+        if self.is_bound_method(value):
+            for callback in self.callbacks[:]:
+                if (len(callback) == 3 and
+                    value.__func__ is callback[0]() and
+                    value.__self__ is callback[1]()):
+                    self.callbacks.remove(callback)
+        else:
+            for callback in self.callbacks[:]:
+                if len(callback) == 2 and value is callback[0]:
+                    self.callbacks.remove(callback)
+
+    def __contains__(self, value: Callable) -> bool:
         if self.is_bound_method(value):
             for callback in self.callbacks[:]:
                 if (len(callback) == 3 and
@@ -372,13 +534,16 @@ class CallbackContainer:
                     value.__self__ is callback[1]()):
                     return True
             return False
-        else:
-            for callback in self.callbacks[:]:
-                if len(callback) == 2 and value is callback[0]:
-                    return True
-            return False
+        for callback in self.callbacks[:]:
+            if len(callback) == 2 and value is callback[0]:
+                return True
+        return False
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Callable]:
+        """
+        Iterates through container contents, yielding the associated callables
+        as naked functions or bound instance methods.
+        """
         for callback in sorted(self.callbacks, key=lambda x: x[-1],
                                reverse=True):
             if len(callback) == 3:
@@ -394,28 +559,8 @@ class CallbackContainer:
             else:
                 yield callback[0]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.callbacks)
-
-    @staticmethod
-    def is_bound_method(func):
-        return (hasattr(func, '__func__') and
-                getattr(func, '__self__', None) is not None)
-
-    def append(self, value, priority=0):
-        self.callbacks.append(self._wrap(value, priority=priority))
-
-    def remove(self, value):
-        if self.is_bound_method(value):
-            for callback in self.callbacks[:]:
-                if (len(callback) == 3 and
-                    value.__func__ is callback[0]() and
-                    value.__self__ is callback[1]()):
-                    self.callbacks.remove(callback)
-        else:
-            for callback in self.callbacks[:]:
-                if len(callback) == 2 and value is callback[0]:
-                    self.callbacks.remove(callback)
 
 
 class CallbackProperty:
@@ -427,20 +572,28 @@ class CallbackProperty:
     CallbackProperties must be defined at the class level. Use
     the helper function :func:`~echo.add_callback` to attach a callback to
     a specific instance of a class with CallbackProperties
+
     Parameters
     ----------
-    default
-        The initial value for the property
-    docstring : str
-        The docstring for the property
-    getter, setter : func
-        Custom getter and setter functions (advanced)
+    :param default:
+        The initial value for the property.
+    :param docstring:
+        The docstring for the property.
+    :type docstring: str | None
+    :param getter:
+        A custom getter function, to mimic the built-in @property decorator.
+    :type getter: Callable | None
+    :param setter:
+        A custom setter function, to mimic the built-in @property.setter
+        decorator.
+    :type setter: Callable | None
     """
 
-    def __init__(self, default=None, docstring=None, getter=None, setter=None):
-        """
-        :param default: The initial value for the property
-        """
+    def __init__(self,
+                 default = None,
+                 docstring: str = None,
+                 getter: Callable = None,
+                 setter: Callable = None):
         self._default = default
         self._callbacks = weakref.WeakKeyDictionary()
         self._disabled = weakref.WeakKeyDictionary()
@@ -449,12 +602,17 @@ class CallbackProperty:
         if docstring is not None:
             self.__doc__ = docstring
 
-    def __get__(self, instance, owner=None):
+    def __get__(self, instance, owner=None) -> Any:
+        """Get the current value of the CallbackProperty."""
         if instance is None:
             return self
         return self._getter(instance)
 
-    def __set__(self, instance, value):
+    def __set__(self, instance, value) -> None:
+        """
+        Set the current value of the CallbackProperty, invoking related
+        callback functions if a state change is detected.
+        """
         if self._setter is None:
             raise AttributeError("attribute has no setter")
         try:
@@ -468,7 +626,7 @@ class CallbackProperty:
 
     def setter(self, func: Callable) -> CallbackProperty:
         """Method to use as a decorator, to mimic @property.setter"""
-        if not isinstance(func, Callable):
+        if not callable(func):
             err_msg = (f"[{error_trace(self)}] `func` must be callable "
                        f"(received: {repr(func)})")
             raise TypeError(err_msg)
@@ -477,18 +635,15 @@ class CallbackProperty:
 
     def notify(self, instance) -> None:
         """
-        Call all callback functions with the current value. Each callback will
-        be passed a reference to the instance whose state has changed:
-        (`callback(instance)`).
+        Invoke all callback functions attached to this CallbackProperty. Each
+        will be invoked as `func(instance)`, where `instance` is a reference
+        to the instance whose state has changed.
 
         Parameters
         ----------
-        instance
-            The instance to consider
-        old
-            The old value of the property
-        new
-            The new value of the property
+        :param instance:
+            The object instance to consider.
+        :type instance: Any
         """
         if not self.enabled(instance):
             return
@@ -496,57 +651,75 @@ class CallbackProperty:
             cback(instance)
 
     def disable(self, instance) -> None:
-        """
-        Disable callbacks for a specific instance
-        """
+        """Disable callbacks for a specific instance."""
         self._disabled[instance] = True
 
     def enable(self, instance) -> None:
-        """
-        Enable previously-disabled callbacks for a specific instance
-        """
+        """Enable previously-disabled callbacks for a specific instance."""
         self._disabled[instance] = False
 
     def enabled(self, instance) -> bool:
         """
-        Check whether callbacks for a specific instance are currently enabled
+        Check whether callbacks are currently enabled for a specific instance.
         """
         return not self._disabled.get(instance, False)
 
     def callbacks(self, instance) -> list[Callable]:
+        """Return a list of all callback functions/methods associated with this
+        CallbackProperty.
+        
+        Modifications that are made to this list (i.e. appending/removing
+        values in-situ) are not propagated to the property itself.  For that,
+        see :meth:`~curvefit.CallbackProperty.add_callback` and
+        :meth:`~curvefit.CallbackProperty.remove_callback`
+        """
         return [signature for signature in self._callbacks.get(instance, [])]
 
-    def add_callback(self, instance, func: Callable, priority: int = 0) -> None:
+    def add_callback(self,
+                     instance,
+                     func: Callable,
+                     priority: int = 0) -> None:
         """
-        Add a callback to a specific instance that manages this property
+        Add a callback function/method to this CallbackProperty within a
+        specific instance.
+
         Parameters
         ----------
-        instance
-            The instance to add the callback to
-        func : func
-            The callback function to add
-        priority : int, optional
-            This can optionally be used to force a certain order of execution of
-            callbacks (larger values indicate a higher priority).
+        :param instance:
+            The instance to add the callback to.
+        :type instance: Any
+        :param func:
+            The callback function/method to add.
+        :type func: Callable
+        :param priority:
+            This can optionally be used to force a certain order of execution
+            of callbacks (larger values indicate a higher priority).
+        :type priority: int, optional
         """
-        if not isinstance(func, Callable):
+        if not callable(func):
             err_msg = (f"[{error_trace(self)}] `func` must be callable "
                        f"(received: {repr(func)})")
             raise TypeError(err_msg)
         self._callbacks.setdefault(instance, CallbackContainer()) \
                        .append(func, priority=priority)
 
-    def remove_callback(self, instance, func: Callable) -> None:
+    def remove_callback(self,
+                        instance,
+                        func: Callable) -> None:
         """
-        Remove a previously-added callback
+        Remove a previously-added callback function/method from this
+        CallbackProperty within `instance`.
+
         Parameters
         ----------
-        instance
-            The instance to detach the callback from
-        func : func
-            The callback function to remove
+        :param instance:
+            The instance to detach the callback from.
+        :type instance: Any
+        :param func:
+            The callback function/method to remove
+        :type func: Callable
         """
-        if not isinstance(func, Callable):
+        if not callable(func):
             err_msg = (f"[{error_trace(self)}] `func` must be a callable "
                        f"(received: {repr(func)})")
             raise TypeError(err_msg)
@@ -558,9 +731,7 @@ class CallbackProperty:
         raise ValueError(err_msg)
 
     def clear_callbacks(self, instance) -> None:
-        """
-        Remove all callbacks on this property.
-        """
+        """Remove all callbacks on this CallbackProperty within `instance`."""
         for cb in self._callbacks:
             if instance in cb:
                 cb[instance].clear()
@@ -568,21 +739,30 @@ class CallbackProperty:
             self._disabled.pop(instance)
 
 
-class delay_callback:
+class delay_callbacks:
     """
-    Delay any callback functions from one or more callback properties
-    This is a context manager. Within the context block, no callbacks
-    will be issued. Each callback will be called once on exit
+    A context manager which delays the firing of callback functions from one or
+    more CallbackProperties until the end of the `with` block.  Each callback
+    will be called once on exit.
+
+    `delay_callbacks` blocks can be nested if needed, causing each callback to
+    be invoked when it is released from the last block that references it.
+
     Parameters
     ----------
-    instance
-        An instance object with callback properties
-    *props : str
-        One or more properties within instance to delay
+    :param instance:
+        An instance object with CallbackProperties.
+    :type instance: Any
+    :param *props:
+        One or more names of properties within `instance` to delay.  If
+        omitted, all callbacks associated with `instance` will be delayed until
+        the end of the block.
+    :type *props: str, optional
+
     Examples
     --------
     ::
-        with delay_callback(foo, 'bar', 'baz'):
+        with delay_callbacks(foo, 'bar', 'baz'):
             f.bar = 20
             f.baz = 30
             f.bar = 10
@@ -649,7 +829,35 @@ class delay_callback:
             cb_prop.notify(instance)
 
 
-class ignore_callback:
+class ignore_callbacks:
+    """
+    A context manager which suppresses the firing of callback functions from
+    one or more CallbackProperties until the end of the `with` block.  No
+    callbacks will be invoked within this block.
+
+    `ignore_callback` blocks can be nested if needed, causing each callback to
+    be disabled until it is released from the last block that references it.
+
+    Parameters
+    ----------
+    :param instance:
+        An instance object with CallbackProperties.
+    :type instance: Any
+    :param *props:
+        One or more names of properties within `instance` to ignore.  If
+        omitted, all callbacks associated with `instance` will be disabled
+        until the end of the block.
+    :type *props: str, optional
+
+    Examples
+    --------
+    ::
+        with ignore_callbacks(foo, 'bar', 'baz'):
+            f.bar = 20
+            f.baz = 30
+            f.bar = 10
+        print('done')  # no callbacks triggered
+    """
 
     # Class-level registry of properties and how many times the callbacks have
     # been ignored. The idea is that when nesting calls to ignore_callback, the
@@ -681,6 +889,7 @@ class ignore_callback:
             self.props = tuple(set(self.props))  # ensure uniqueness
 
     def __enter__(self) -> None:
+        """Disable all CallbackProperties specified in `__init__`."""
         for prop_name in self.props:
             cb_prop = getattr(type(self.instance), prop_name)
             cb_prop.disable(self.instance)
@@ -691,6 +900,10 @@ class ignore_callback:
             cb_prop.disable(self.instance)
 
     def __exit__(self, *_) -> None:
+        """
+        Re-enable CallbackProperties if no other ignore_callbacks block
+        mentions them.
+        """
         for prop_name in self.props:
             cb_prop = getattr(type(self.instance), prop_name)
             if self.ignore_count[self.instance, prop_name] > 1:

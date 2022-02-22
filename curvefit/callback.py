@@ -59,15 +59,13 @@ def callback_property(getter: Callable) -> CallbackProperty:
         class Foo(object);
             x = CallbackProperty(initial_value)
     """
-
-    cb = CallbackProperty(getter=getter)
-    cb.__doc__ = getter.__doc__
-    return cb
+    return CallbackProperty(getter=getter, docstring=getter.__doc__)
 
 
 def callbacks(
     instance,
-    prop_name: str | None = None) -> list[Callable] | dict[str, list[Callable]]:
+    prop_name: str | None = None
+) -> list[Callable] | dict[str, list[Callable]]:
     """
     Return a list of callback functions attached to an instance property.  If
     `prop_name` is omitted, returns a dictionary whose keys represent the
@@ -103,13 +101,13 @@ def callbacks(
         `instance`.
     """
     if prop_name is None:  # return callback dictionary for entire instance
-        callbacks = {}
+        callback_dict = {}
         for prop_name in dir(instance):
             if hasattr(type(instance), prop_name):
                 prop_val = getattr(type(instance), prop_name)
                 if isinstance(prop_val, CallbackProperty):
-                    callbacks[prop_name] = prop_val.callbacks(instance)
-        return callbacks
+                    callback_dict[prop_name] = prop_val.callbacks(instance)
+        return callback_dict
 
     # return callbacks for specific property
     if not isinstance(prop_name, str):
@@ -124,10 +122,12 @@ def callbacks(
     return prop.callbacks(instance)
 
 
-def add_callback(instance,
-                 props: str | Iterable[str] | dict[str, Callable],
-                 callback: Callable | Iterable[Callable] | None = None,
-                 priority: int = 0) -> None:
+def add_callback(
+    instance,
+    props: str | Iterable[str] | dict[str, Callable],
+    callback: Callable | Iterable[Callable] | None = None,
+    priority: int = 0
+) -> None:
     """
     Attach a callback function to a property in an instance.
 
@@ -205,7 +205,7 @@ def add_callback(instance,
                        f"{type(instance)}.{name} is not a CallbackProperty")
             raise ValueError(err_msg)
         return cb_prop
-    
+
     def try_add(cb_prop: CallbackProperty, func: Callable) -> None:
         try:
             cb_prop.add_callback(instance, func, priority=priority)
@@ -249,9 +249,11 @@ def add_callback(instance,
         raise TypeError(err_msg)
 
 
-def remove_callback(instance,
-                    props: str | Iterable[str] | dict[str, Callable],
-                    callback: Callable | Iterable[Callable] | None) -> None:
+def remove_callback(
+    instance,
+    props: str | Iterable[str] | dict[str, Callable],
+    callback: Callable | Iterable[Callable] | None = None
+) -> None:
     """
     Remove a callback function from a property in an instance.
 
@@ -325,7 +327,7 @@ def remove_callback(instance,
                        f"{type(instance)}.{name} is not a CallbackProperty")
             raise ValueError(err_msg)
         return cb_prop
-    
+
     def try_remove(cb_prop: CallbackProperty, func: Callable) -> None:
         try:
             cb_prop.remove_callback(instance, func)
@@ -333,7 +335,7 @@ def remove_callback(instance,
             err_msg = (f"[{error_trace()}] could not remove callback: "
                        f"{repr(func)}")
             raise type(exc)(err_msg) from exc
-    
+
     if isinstance(props, str):  # single property, one or more callbacks
         if callback is None:
             err_msg = (f"[{error_trace()}] `callback` must not be None")
@@ -445,7 +447,7 @@ def copy_callbacks(old_instance,
     :raises TypeError:
         If `check_type=True` and `type(old_instance) != type(new_instance)`.
     """
-    if check_type and not type(old_instance) == type(new_instance):
+    if check_type and not isinstance(new_instance, type(old_instance)):
         err_msg = (f"[{error_trace()}] type of `old_instance` does not match "
                    f"that of `new_instance`({type(old_instance)} != "
                    f"{type(new_instance)}); if this is intended behavior, use "
@@ -467,7 +469,7 @@ class CallbackContainer:
 
     def __init__(self):
         self.callbacks = []
-    
+
     @staticmethod
     def is_bound_method(func: Callable) -> bool:
         """Check whether `func` is a naked function or a bound method"""
@@ -667,13 +669,13 @@ class CallbackProperty:
     def callbacks(self, instance) -> list[Callable]:
         """Return a list of all callback functions/methods associated with this
         CallbackProperty.
-        
+
         Modifications that are made to this list (i.e. appending/removing
         values in-situ) are not propagated to the property itself.  For that,
         see :meth:`~curvefit.CallbackProperty.add_callback` and
         :meth:`~curvefit.CallbackProperty.remove_callback`
         """
-        return [signature for signature in self._callbacks.get(instance, [])]
+        return list(self._callbacks.get(instance, []))
 
     def add_callback(self,
                      instance,
@@ -732,14 +734,14 @@ class CallbackProperty:
 
     def clear_callbacks(self, instance) -> None:
         """Remove all callbacks on this CallbackProperty within `instance`."""
-        for cb in self._callbacks:
-            if instance in cb:
-                cb[instance].clear()
+        container = self._callbacks.get(instance, None)
+        if container is not None:
+            container.clear()
         if instance in self._disabled:
             self._disabled.pop(instance)
 
 
-class delay_callbacks:
+class DelayCallbacks:
     """
     A context manager which delays the firing of callback functions from one or
     more CallbackProperties until the end of the `with` block.  Each callback
@@ -829,7 +831,7 @@ class delay_callbacks:
             cb_prop.notify(instance)
 
 
-class ignore_callbacks:
+class IgnoreCallbacks:
     """
     A context manager which suppresses the firing of callback functions from
     one or more CallbackProperties until the end of the `with` block.  No

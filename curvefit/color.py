@@ -31,6 +31,13 @@ from curvefit import error_trace, NUMERIC, NUMERIC_TYPECHECK
 from curvefit.callback import callback_property
 
 
+"""
+TODO: maybe get rid of DynamicColor.parse?  Would enforce a callback-compatible
+    design pattern.
+TODO: render documentation and do final cleanup
+"""
+
+
 NAMED_COLORS = {}
 COLORS_NAMED = {}
 for k, v in mpl.colors.get_named_colors_mapping().items():

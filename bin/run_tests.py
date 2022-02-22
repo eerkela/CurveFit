@@ -4,8 +4,9 @@ import unittest
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from curvefit.test.color_test import *
-from curvefit.test.text_test import *
+from curvefit.test.callback_test import *
+# from curvefit.test.color_test import *
+# from curvefit.test.text_test import *
 
 
 if __name__ == "__main__":

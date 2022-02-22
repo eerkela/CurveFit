@@ -18,6 +18,7 @@ from curvefit import error_trace
 
 """
 TODO: write unit tests
+TODO: render documentation and do final cleanup
 """
 
 
@@ -124,17 +125,28 @@ def callbacks(
 
 def add_callback(
     instance,
-    props: str | Iterable[str] | dict[str, Callable],
+    props: (str | Iterable[str] | dict[str, Callable] |
+            dict[str, Iterable[Callable]]),
     callback: Callable | Iterable[Callable] | None = None,
     priority: int = 0
 ) -> None:
     """
-    Attach a callback function to a property in an instance.
+    Attach a callback function to a property in an instance.  Supports
+    multiple assignment via dictionaries and/or iterables of property
+    names/callback functions.
 
-    Supports multiple assignment via dictionaries and/or iterables of property
-    names/callback functions.  If using a dictionary to perform multiple
-    assignment, the `callback` field should be omitted, and the values of
-    `props` should reference the callback function(s) to use for each property.
+    If `props` is an iterable of property names and `callback` is not `None`,
+    then `callback` is assigned to every property in `props`.  Conversely, if
+    `props` is the name of a single property and `callback` is an iterable of
+    Callables, then each function in `callback` will be attached to the
+    property specified in `props`.  If both are iterable, then every function
+    in `callback` will be added to every property in `props`.
+
+    If `props` is a dictionary of property names and Callables, then each
+    Callable will be attached to the property specified by its key.  The values
+    of this dictionary can themselves be iterable, mirroring the above
+    functionality.  In this case, `callback` should be omitted
+    (`callback=None`).
 
     Parameters
     ----------
@@ -194,7 +206,7 @@ def add_callback(
         add_callback(f, 'bar', [callback, f.callback])  # multiple callbacks
         add_callback(f, {'bar': callback, 'baz': f.callback})  # dict-based
     """
-    def get_cb_prop(name: str) -> CallbackProperty:
+    def get_cb_prop(name):
         if not isinstance(name, str):
             err_msg = (f"[{error_trace(stack_index=2)}] property names must "
                        f"be strings (received: {repr(name)})")
@@ -206,11 +218,15 @@ def add_callback(
             raise ValueError(err_msg)
         return cb_prop
 
-    def try_add(cb_prop: CallbackProperty, func: Callable) -> None:
+    def try_add(cb_prop, func):
         try:
-            cb_prop.add_callback(instance, func, priority=priority)
+            if isinstance(func, Iterable):
+                for cb_func in func:
+                    cb_prop.add_callback(instance, cb_func, priority=priority)
+            else:
+                cb_prop.add_callback(instance, func, priority=priority)
         except Exception as exc:
-            err_msg = (f"[{error_trace()}] could not add callback: "
+            err_msg = (f"[{error_trace()}] could not add callback(s): "
                        f"{repr(func)}")
             raise type(exc)(err_msg) from exc
 
@@ -219,26 +235,21 @@ def add_callback(
             err_msg = (f"[{error_trace()}] `callback` must not be None")
             raise RuntimeError(err_msg)
         cb_prop = get_cb_prop(props)
-        if isinstance(callback, Iterable):
-            for cb_func in callback:
-                try_add(cb_prop, cb_func)
-        else:
-            try_add(cb_prop, callback)
+        try_add(cb_prop, callback)
 
-    elif isinstance(props, dict):  # multiple properties, multiple callbacks
+    elif isinstance(props, dict):  # dict-based, fine control
         if callback is not None:
             err_msg = (f"[{error_trace()}] when passing a callback dictionary, "
                        f"the `callback` argument should not be used")
             raise RuntimeError(err_msg)
         for prop_name, func in props.items():
             cb_prop = get_cb_prop(prop_name)
-            if isinstance(func, Iterable):
-                for cb_func in func:
-                    try_add(cb_prop, cb_func)
-            else:
-                try_add(cb_prop, func)
+            try_add(cb_prop, func)
 
-    elif isinstance(props, Iterable):  # multiple properties, single callback
+    elif isinstance(props, Iterable):  # multiple properties, one/more callbacks
+        if callback is None:
+            err_msg = (f"[{error_trace()}] `callback` must not be None")
+            raise RuntimeError(err_msg)
         for prop_name in props:
             cb_prop = get_cb_prop(prop_name)
             try_add(cb_prop, callback)
@@ -251,16 +262,15 @@ def add_callback(
 
 def remove_callback(
     instance,
-    props: str | Iterable[str] | dict[str, Callable],
+    props: (str | Iterable[str] | dict[str, Callable] |
+            dict[str, Iterable[Callable]]),
     callback: Callable | Iterable[Callable] | None = None
 ) -> None:
     """
-    Remove a callback function from a property in an instance.
-
-    Supports multiple removal via dictionaries and/or iterables of property
-    names/callback functions.  If using a dictionary to perform multiple
-    removal, the `callback` field should be omitted, and the values of `props`
-    should reference the callback function(s) to remove for each property.
+    Remove a callback function from a property in an instance.  Supports
+    multiple removal via dictionaries and/or iterables of property
+    names/callback functions, using the same interface as
+    :func:`~curvefit.callback.add_callback`.
 
     Parameters
     ----------
@@ -316,7 +326,7 @@ def remove_callback(
         remove_callback(f, 'bar', [callback, f.callback])  # multiple callbacks
         remove_callback(f, {'bar': callback, 'baz': f.callback})  # dict-based
     """
-    def get_cb_prop(name: str) -> CallbackProperty:
+    def get_cb_prop(name):
         if not isinstance(name, str):
             err_msg = (f"[{error_trace(stack_index=2)}] property names must "
                        f"be strings (received: {repr(name)})")
@@ -328,9 +338,13 @@ def remove_callback(
             raise ValueError(err_msg)
         return cb_prop
 
-    def try_remove(cb_prop: CallbackProperty, func: Callable) -> None:
+    def try_remove(cb_prop, func):
         try:
-            cb_prop.remove_callback(instance, func)
+            if isinstance(func, Iterable):
+                for cb_func in func:
+                    cb_prop.remove_callback(instance, cb_func)
+            else:
+                cb_prop.remove_callback(instance, func)
         except Exception as exc:
             err_msg = (f"[{error_trace()}] could not remove callback: "
                        f"{repr(func)}")
@@ -341,11 +355,7 @@ def remove_callback(
             err_msg = (f"[{error_trace()}] `callback` must not be None")
             raise RuntimeError(err_msg)
         cb_prop = get_cb_prop(props)
-        if isinstance(callback, Iterable):
-            for cb_func in callback:
-                try_remove(cb_prop, cb_func)
-        else:
-            try_remove(cb_prop, callback)
+        try_remove(cb_prop, callback)
 
     elif isinstance(props, dict):  # multiple properties, multiple callbacks
         if callback is not None:
@@ -354,11 +364,7 @@ def remove_callback(
             raise RuntimeError(err_msg)
         for prop_name, func in props.items():
             cb_prop = get_cb_prop(prop_name)
-            if isinstance(func, Iterable):
-                for cb_func in func:
-                    try_remove(cb_prop, cb_func)
-            else:
-                try_remove(cb_prop, func)
+            try_remove(cb_prop, func)
 
     elif isinstance(props, Iterable):  # multiple properties, single callback
         if callback is None:
@@ -376,8 +382,8 @@ def remove_callback(
 
 def clear_callbacks(instance, *props: str) -> None:
     """
-    Clear all callbacks associated with specified properties of `instance`.  If
-    no properties are given, clears all callbacks associated with `instance`.
+    Clear all callbacks associated with specified properties in `instance`.  If
+    no properties are given, clears every callback associated with `instance`.
 
     Parameters
     ----------
@@ -596,13 +602,33 @@ class CallbackProperty:
                  docstring: str = None,
                  getter: Callable = None,
                  setter: Callable = None):
-        self._default = default
+        if default is not None:  # Manual CallbackProperty
+            self._default = default
+            self._values = weakref.WeakKeyDictionary()
+            if getter is None:
+                getter = self._default_getter
+            if setter is None:
+                setter = self._default_setter
         self._callbacks = weakref.WeakKeyDictionary()
         self._disabled = weakref.WeakKeyDictionary()
         self._getter = getter
         self._setter = setter
         if docstring is not None:
             self.__doc__ = docstring
+
+    def _default_getter(self, instance, owner=None):
+        """
+        Default getter for manual CallbackProperties (not created through
+        `@callback_property`).
+        """
+        return self._values.get(instance, self._default)
+
+    def _default_setter(self, instance, value) -> None:
+        """
+        Default setter for manual CallbackProperties (not created through
+        `@callback_property`).
+        """
+        self._values.__setitem__(instance, value)
 
     def __get__(self, instance, owner=None) -> Any:
         """Get the current value of the CallbackProperty."""
@@ -616,7 +642,7 @@ class CallbackProperty:
         callback functions if a state change is detected.
         """
         if self._setter is None:
-            raise AttributeError("attribute has no setter")
+            raise AttributeError("CallbackProperty has no setter")
         try:
             old = self.__get__(instance)
         except AttributeError:  # pragma: no cover
@@ -741,7 +767,7 @@ class CallbackProperty:
             self._disabled.pop(instance)
 
 
-class DelayCallbacks:
+class delay_callbacks:
     """
     A context manager which delays the firing of callback functions from one or
     more CallbackProperties until the end of the `with` block.  Each callback
@@ -831,7 +857,7 @@ class DelayCallbacks:
             cb_prop.notify(instance)
 
 
-class IgnoreCallbacks:
+class ignore_callbacks:
     """
     A context manager which suppresses the firing of callback functions from
     one or more CallbackProperties until the end of the `with` block.  No
